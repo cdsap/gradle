@@ -91,6 +91,16 @@ public class FixedExclusiveModeCrossProcessCacheAccess extends AbstractCrossProc
     }
 
     @Override
+    public Runnable acquireFileLock(FileLockManager.LockMode mode) {
+        return Runnables.doNothing();
+    }
+
+    @Override
+    public <T> T withFileLock(FileLockManager.LockMode mode, Supplier<T> factory) {
+        return factory.get();
+    }
+
+    @Override
     public <T> T withFileLock(Supplier<T> factory) {
         return factory.get();
     }

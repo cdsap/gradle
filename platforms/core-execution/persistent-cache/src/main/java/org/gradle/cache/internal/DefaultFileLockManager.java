@@ -477,6 +477,8 @@ public class DefaultFileLockManager implements FileLockManager {
             return backoff.retryUntil(new ExponentialBackoff.Query<FileLockOutcome>() {
                 private long lastPingTime;
                 private int lastLockHolderPort;
+                private boolean loggedWaiting;
+                private String lastLockHolderPid;
 
                 @Override
                 public ExponentialBackoff.Result<FileLockOutcome> run() throws IOException, InterruptedException {
@@ -484,8 +486,18 @@ public class DefaultFileLockManager implements FileLockManager {
                     if (lockOutcome.isLockWasAcquired()) {
                         return ExponentialBackoff.Result.successful(lockOutcome);
                     }
+                    LockInfo lockInfo = readInformationRegion(backoff);
+                    if (ConcurrencyMode.isAgentic()) {
+                        if (!loggedWaiting) {
+                            LOGGER.lifecycle("Waiting to acquire {} lock on {}. (held by PID: {})", lockMode.toString().toLowerCase(Locale.ROOT), displayName, lockInfo.pid);
+                            loggedWaiting = true;
+                            lastLockHolderPid = lockInfo.pid;
+                        } else if (lockInfo.pid != null && !lockInfo.pid.equals(lastLockHolderPid)) {
+                            LOGGER.lifecycle("Lock on {} is now held by a different process (PID: {}). Still waiting...", displayName, lockInfo.pid);
+                            lastLockHolderPid = lockInfo.pid;
+                        }
+                    }
                     if (port != FileLockContentionHandler.INVALID_PORT) { //we don't like the assumption about the port very much
-                        LockInfo lockInfo = readInformationRegion(backoff);
                         if (lockInfo.port != FileLockContentionHandler.INVALID_PORT) {
                             if (lockInfo.port != lastLockHolderPort) {
                                 backoff.restartTimer();

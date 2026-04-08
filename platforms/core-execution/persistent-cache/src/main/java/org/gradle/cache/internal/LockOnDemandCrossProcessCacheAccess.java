@@ -84,8 +84,8 @@ public class LockOnDemandCrossProcessCacheAccess extends AbstractCrossProcessCac
     }
 
     @Override
-    public <T> T withFileLock(Supplier<T> factory) {
-        incrementLockCount();
+    public <T> T withFileLock(FileLockManager.LockMode mode, Supplier<T> factory) {
+        incrementLockCount(mode);
         try {
             return factory.get();
         } finally {
@@ -93,7 +93,18 @@ public class LockOnDemandCrossProcessCacheAccess extends AbstractCrossProcessCac
         }
     }
 
-    private void incrementLockCount() {
+    @Override
+    public Runnable acquireFileLock(FileLockManager.LockMode mode) {
+        incrementLockCount(mode);
+        return unlocker;
+    }
+
+    @Override
+    public <T> T withFileLock(Supplier<T> factory) {
+        return withFileLock(FileLockManager.LockMode.Exclusive, factory);
+    }
+
+    private void incrementLockCount(FileLockManager.LockMode mode) {
         stateLock.lock();
         try {
             if (fileLock == null) {
@@ -101,9 +112,9 @@ public class LockOnDemandCrossProcessCacheAccess extends AbstractCrossProcessCac
                     throw new IllegalStateException("Mismatched lock count.");
                 }
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Acquiring file lock for {}", cacheDisplayName);
+                    LOGGER.debug("Acquiring {} file lock for {}", mode, cacheDisplayName);
                 }
-                fileLock = lockManager.lock(lockTarget, lockOptions, cacheDisplayName, "", whenContended);
+                fileLock = lockManager.lock(lockTarget, lockOptions.copyWithMode(mode), cacheDisplayName, "", whenContended);
                 try {
                     if (initAction.requiresInitialization(fileLock)) {
                         fileLock.writeFile(() -> initAction.initialize(fileLock));
@@ -114,6 +125,8 @@ public class LockOnDemandCrossProcessCacheAccess extends AbstractCrossProcessCac
                     fileLock = null;
                     throw UncheckedException.throwAsUncheckedException(e);
                 }
+            } else if (mode == FileLockManager.LockMode.Exclusive && fileLock.isShared()) {
+                throw new UnsupportedOperationException("Cannot upgrade a shared lock to an exclusive lock. This is not yet supported.");
             }
             lockCount++;
         } finally {
@@ -160,8 +173,7 @@ public class LockOnDemandCrossProcessCacheAccess extends AbstractCrossProcessCac
 
     @Override
     public Runnable acquireFileLock() {
-        incrementLockCount();
-        return unlocker;
+        return acquireFileLock(FileLockManager.LockMode.Exclusive);
     }
 
     private class ContendedAction implements Consumer<FileLockReleasedSignal> {

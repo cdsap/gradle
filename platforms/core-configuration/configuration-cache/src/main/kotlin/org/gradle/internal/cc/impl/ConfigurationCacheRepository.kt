@@ -232,7 +232,7 @@ class ConfigurationCacheRepository(
         }
 
         override fun <T : Any> useForStateLoad(action: Layout.() -> T): ConfigurationCacheStateStore.StateAccessResult<T> {
-            return withExclusiveAccessToCache(baseDir) { cacheDir ->
+            return withSharedAccessToCache(baseDir) { cacheDir ->
                 markAccessed(cacheDir)
                 // this needs to be thread-safe as we may have multiple adding threads
                 val stateFiles = Collections.synchronizedList(mutableListOf<File>())
@@ -316,11 +316,15 @@ class ConfigurationCacheRepository(
 
     private
     fun <T : Any> withExclusiveAccessToCache(baseDir: File, action: (File) -> T): T =
-        cache.withFileLock(
-            Supplier {
-                action(baseDir)
-            }
-        )
+        cache.withFileLock(FileLockManager.LockMode.Exclusive, Supplier {
+            action(baseDir)
+        })
+
+    private
+    fun <T : Any> withSharedAccessToCache(baseDir: File, action: (File) -> T): T =
+        cache.withFileLock(FileLockManager.LockMode.Shared, Supplier {
+            action(baseDir)
+        })
 
     private
     fun dirForEntry(cacheKey: String) =

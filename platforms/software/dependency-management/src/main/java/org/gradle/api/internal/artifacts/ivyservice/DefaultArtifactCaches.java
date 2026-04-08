@@ -22,6 +22,7 @@ import org.gradle.api.internal.cache.CacheConfigurationsInternal;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.cache.CacheCleanupStrategyFactory;
+import org.gradle.cache.FileLockManager;
 import org.gradle.cache.IndexedCache;
 import org.gradle.cache.UnscopedCacheBuilderFactory;
 import org.gradle.cache.scopes.GlobalScopedCacheBuilderFactory;
@@ -164,6 +165,11 @@ public class DefaultArtifactCaches implements ArtifactCachesProvider {
         }
 
         @Override
+        public <T> T withFileLock(FileLockManager.LockMode mode, Supplier<? extends T> action) {
+            return getDelegate().withFileLock(mode, action);
+        }
+
+        @Override
         public <T> T withFileLock(Supplier<? extends T> action) {
             return getDelegate().withFileLock(action);
         }
@@ -171,6 +177,11 @@ public class DefaultArtifactCaches implements ArtifactCachesProvider {
         @Override
         public void withFileLock(Runnable action) {
             getDelegate().withFileLock(action);
+        }
+
+        @Override
+        public <T> T useCache(FileLockManager.LockMode mode, Supplier<? extends T> action) {
+            return getDelegate().useCache(mode, action);
         }
 
         @Override

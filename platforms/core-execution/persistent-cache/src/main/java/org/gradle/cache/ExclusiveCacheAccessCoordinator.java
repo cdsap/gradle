@@ -22,6 +22,24 @@ import java.util.function.Supplier;
  */
 public interface ExclusiveCacheAccessCoordinator {
     /**
+     * Performs some work against the cache. Acquires locks on the appropriate resources with the given mode, so that the given action is synchronized across all processes (including this one). Releases the locks and all resources at the end of the action.
+     *
+     * <p>This method is re-entrant, so that an action can call back into this method.</p>
+     *
+     * @since 8.12
+     */
+    <T> T useCache(FileLockManager.LockMode mode, Supplier<? extends T> action);
+
+    /**
+     * Performs some work against the cache. Acquires locks on the appropriate file resources with the given mode, so that the action is synchronized across all processes. Releases the locks and all resources at the end of the action. Allows other threads from this process to execute, but synchronizes with threads from other processes according to the lock mode.
+     *
+     * <p>This method is re-entrant, so that an action can call back into this method.</p>
+     *
+     * @since 8.12
+     */
+    <T> T withFileLock(FileLockManager.LockMode mode, Supplier<? extends T> action);
+
+    /**
      * Performs some work against the cache. Acquires exclusive locks on the appropriate resources, so that the given action is the only action to execute across all processes (including this one). Releases the locks and all resources at the end of the action.
      *
      * <p>This method is re-entrant, so that an action can call back into this method.</p>

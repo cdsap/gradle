@@ -20,6 +20,17 @@ import java.util.function.Supplier;
 
 public interface CrossProcessCacheAccess {
     /**
+     * Runs the given action while this process is holding a file lock on the cache with the given mode. Multiple threads may run concurrently.
+     */
+    <T> T withFileLock(FileLockManager.LockMode mode, Supplier<T> factory);
+
+    /**
+     * Acquires a file lock on the cache with the given mode. The caller is responsible for running the resulting action to release the lock.
+     * The lock may be released by any thread.
+     */
+    Runnable acquireFileLock(FileLockManager.LockMode mode);
+
+    /**
      * Runs the given action while this process is holding an exclusive file lock on the cache. Multiple threads may run concurrently.
      */
     <T> T withFileLock(Supplier<T> factory);

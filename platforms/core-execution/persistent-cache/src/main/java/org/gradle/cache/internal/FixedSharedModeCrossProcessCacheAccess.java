@@ -124,12 +124,28 @@ public class FixedSharedModeCrossProcessCacheAccess extends AbstractCrossProcess
 
     @Override
     public Runnable acquireFileLock() {
+        return acquireFileLock(Exclusive);
+    }
+
+    @Override
+    public Runnable acquireFileLock(FileLockManager.LockMode mode) {
+        if (mode == Shared) {
+            return () -> {};
+        }
+        throw failure();
+    }
+
+    @Override
+    public <T> T withFileLock(FileLockManager.LockMode mode, Supplier<T> factory) {
+        if (mode == Shared) {
+            return factory.get();
+        }
         throw failure();
     }
 
     @Override
     public <T> T withFileLock(Supplier<T> factory) {
-        throw failure();
+        return withFileLock(Exclusive, factory);
     }
 
     protected UnsupportedOperationException failure() {

@@ -88,6 +88,11 @@ public class WritableArtifactCacheLockingAccessCoordinator implements ArtifactCa
     }
 
     @Override
+    public <T> T withFileLock(FileLockManager.LockMode mode, Supplier<? extends T> action) {
+        return cache.withFileLock(mode, action);
+    }
+
+    @Override
     public <T> T withFileLock(Supplier<? extends T> action) {
         return cache.withFileLock(action);
     }
@@ -95,6 +100,11 @@ public class WritableArtifactCacheLockingAccessCoordinator implements ArtifactCa
     @Override
     public void withFileLock(Runnable action) {
         cache.withFileLock(action);
+    }
+
+    @Override
+    public <T> T useCache(FileLockManager.LockMode mode, Supplier<? extends T> action) {
+        return cache.useCache(mode, action);
     }
 
     @Override
@@ -124,11 +134,12 @@ public class WritableArtifactCacheLockingAccessCoordinator implements ArtifactCa
         @Nullable
         @Override
         public V getIfPresent(final K key) {
-            return cache.useCache(() -> indexedCache.getIfPresent(key));
+            return cache.useCache(FileLockManager.LockMode.Shared, () -> indexedCache.getIfPresent(key));
         }
 
         @Override
         public V get(final K key, final Function<? super K, ? extends V> producer) {
+            // We use exclusive lock here because the producer might want to update the cache
             return cache.useCache(() -> indexedCache.get(key, producer));
         }
 

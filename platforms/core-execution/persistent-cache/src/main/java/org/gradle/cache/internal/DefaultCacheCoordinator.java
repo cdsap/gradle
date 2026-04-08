@@ -45,8 +45,10 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -75,7 +77,8 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
     private final Condition condition = stateLock.newCondition();
 
     private boolean open;
-    private Thread owner;
+    private Thread exclusiveOwner;
+    private final Set<Thread> sharedOwners = new HashSet<>();
     private FileLock fileLock;
     private FileLock.State stateAtOpen;
     private Runnable fileLockHeldByOwner;
@@ -222,18 +225,23 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
     }
 
     @Override
+    public <T> T withFileLock(FileLockManager.LockMode mode, Supplier<? extends T> action) {
+        return crossProcessCacheAccess.withFileLock(mode, action);
+    }
+
+    @Override
     public <T> T withFileLock(Supplier<? extends T> action) {
-        return crossProcessCacheAccess.withFileLock(action);
+        return withFileLock(Exclusive, action);
     }
 
     @Override
     public void withFileLock(Runnable action) {
-        crossProcessCacheAccess.withFileLock(toSupplier(action));
+        withFileLock(Exclusive, toSupplier(action));
     }
 
     @Override
     public void useCache(Runnable action) {
-        useCache(toSupplier(action));
+        useCache(Exclusive, toSupplier(action));
     }
 
     private static <T> Supplier<T> toSupplier(Runnable action) {
@@ -245,14 +253,19 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
 
     @Override
     public <T> T useCache(Supplier<? extends T> factory) {
+        return useCache(Exclusive, factory);
+    }
+
+    @Override
+    public <T> T useCache(FileLockManager.LockMode mode, Supplier<? extends T> factory) {
         boolean wasStarted;
         stateLock.lock();
         try {
-            takeOwnership();
+            takeOwnership(mode);
             try {
-                wasStarted = onStartWork();
+                wasStarted = onStartWork(mode);
             } catch (Throwable t) {
-                releaseOwnership();
+                releaseOwnership(mode);
                 throw UncheckedException.throwAsUncheckedException(t);
             }
         } finally {
@@ -268,7 +281,7 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
                         onEndWork();
                     }
                 } finally {
-                    releaseOwnership();
+                    releaseOwnership(mode);
                 }
             } finally {
                 stateLock.unlock();
@@ -280,16 +293,36 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
      * Waits until the current thread can take ownership.
      * Must be called while holding the lock.
      */
-    private void takeOwnership() {
-        while (owner != null && owner != Thread.currentThread()) {
+    private void takeOwnership(FileLockManager.LockMode mode) {
+        if (mode == FileLockManager.LockMode.Shared && !ConcurrencyMode.isAgentic()) {
+            mode = Exclusive;
+        }
+        while (!canTakeOwnership(mode)) {
             try {
                 condition.await();
             } catch (InterruptedException e) {
                 throw UncheckedException.throwAsUncheckedException(e);
             }
         }
-        owner = Thread.currentThread();
+        if (mode == Exclusive) {
+            exclusiveOwner = Thread.currentThread();
+        } else if (mode == FileLockManager.LockMode.Shared) {
+            sharedOwners.add(Thread.currentThread());
+        }
         operations.pushCacheAction();
+    }
+
+    private boolean canTakeOwnership(FileLockManager.LockMode mode) {
+        if (exclusiveOwner == Thread.currentThread()) {
+            return true;
+        }
+        if (mode == Exclusive) {
+            return exclusiveOwner == null && sharedOwners.isEmpty();
+        }
+        if (mode == FileLockManager.LockMode.Shared) {
+            return exclusiveOwner == null || sharedOwners.contains(Thread.currentThread());
+        }
+        return false;
     }
 
     /**
@@ -297,10 +330,10 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
      * Must be called while holding the lock.
      */
     private void takeOwnershipNow() {
-        if (owner != null && owner != Thread.currentThread()) {
+        if (!canTakeOwnership(Exclusive)) {
             throw new IllegalStateException(String.format("Cannot take ownership of %s as it is currently being used by another thread.", cacheDisplayName));
         }
-        owner = Thread.currentThread();
+        exclusiveOwner = Thread.currentThread();
         operations.pushCacheAction();
     }
 
@@ -308,12 +341,23 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
      * Releases ownership of the cache.
      * Must be called while holding the lock.
      */
-    private void releaseOwnership() {
+    private void releaseOwnership(FileLockManager.LockMode mode) {
+        if (mode == FileLockManager.LockMode.Shared && !ConcurrencyMode.isAgentic()) {
+            mode = Exclusive;
+        }
         operations.popCacheAction();
         if (!operations.isInCacheAction()) {
-            owner = null;
+            if (exclusiveOwner == Thread.currentThread()) {
+                exclusiveOwner = null;
+            } else {
+                sharedOwners.remove(Thread.currentThread());
+            }
             condition.signalAll();
         }
+    }
+
+    private void releaseOwnership() {
+        releaseOwnership(Exclusive);
     }
 
     @Override
@@ -407,12 +451,19 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
         }
     }
 
-    private boolean onStartWork() {
+    private boolean onStartWork(FileLockManager.LockMode mode) {
+        if (mode == FileLockManager.LockMode.Shared && !ConcurrencyMode.isAgentic()) {
+            mode = Exclusive;
+        }
         if (fileLockHeldByOwner != null) {
             return false;
         }
-        fileLockHeldByOwner = crossProcessCacheAccess.acquireFileLock();
+        fileLockHeldByOwner = crossProcessCacheAccess.acquireFileLock(mode);
         return true;
+    }
+
+    private boolean onStartWork() {
+        return onStartWork(Exclusive);
     }
 
     private boolean onEndWork() {
@@ -430,8 +481,8 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
     private FileLock getFileLock() {
         stateLock.lock();
         try {
-            if (Thread.currentThread() != owner) {
-                throw new IllegalStateException(String.format("The %s has not been locked for this thread. File lock: %s, owner: %s", cacheDisplayName, fileLock != null, owner));
+            if (exclusiveOwner != Thread.currentThread() && !sharedOwners.contains(Thread.currentThread())) {
+                throw new IllegalStateException(String.format("The %s has not been locked for this thread. File lock: %s, exclusive owner: %s, shared owners: %s", cacheDisplayName, fileLock != null, exclusiveOwner, sharedOwners));
             }
         } finally {
             stateLock.unlock();
@@ -490,7 +541,7 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
     }
 
     Thread getOwner() {
-        return owner;
+        return exclusiveOwner;
     }
 
     FileAccess getFileAccess() {
