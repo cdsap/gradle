@@ -1,18 +1,17 @@
-# Phase 8 (planned): Multi-process tests and shared store
+# Phase 8: Multi-process tests and shared store
 
-Phase 7 shipped **user-facing documentation** for concurrent invocations (`phase7.md`). Phase 8 focuses on **automated multi-process coverage** and the **shared store** experiment; daemon work remains optional and metric-driven.
+Phase 7 shipped user-facing documentation for concurrent invocations (`phase7.md`). Phase 8 adds **automated multi-process coverage** and tracks the **shared store** experiment.
 
-## 1. Multi-process integration tests
+## Status
 
-- Two `GradleExecuter` instances (or equivalent) sharing one temporary `GRADLE_USER_HOME`.
-- Pass `--concurrent` (and any flags required for the scenario under test).
-- Assert: both builds succeed; no corrupt cache markers; optional `BuildOperationListener` expects an `Acquire file lock on` operation with structured result when contention is forced.
+### Done
 
-## 2. Shared store
+- **Multi-process integration test** — `ConcurrentInvocationsSharedUserHomeIntegrationTest` in `persistent-cache`: two `GradleContextualExecuter` builds start in parallel with `--concurrent` and `--no-daemon`, share one `GRADLE_USER_HOME`, resolve the same Maven module into `caches/modules-2`, assert lifecycle text for concurrent invocations and successful `:compileJava`.
 
-- Pick one high-value path (per `spec_gradle_agentic_mode.md`): e.g. cache index or metadata still behind a coarse lock.
-- Under `org.gradle.concurrent` + internal guard: read-shared/write-exclusive or staging + atomic publish, with correctness tests.
+### Still open
 
-## 3. Daemon (optional)
+1. **Stronger assertions** — Optional `BuildOperationListener` / forced lock contention (see original Phase 7 plan).
+2. **Shared store (§2)** — One targeted path: RW or staging under `org.gradle.concurrent` + internal guard (`phase9.md`).
+3. **Daemon (§3)** — Optional; only after metrics from overlapping invocations.
 
-- Revisit only after §1 yields timing and lock-wait data from real overlapping invocations.
+Next: **`phase9.md`**.
