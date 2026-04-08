@@ -18,6 +18,7 @@ package org.gradle.internal.execution.history.impl;
 
 import org.gradle.cache.IndexedCache;
 import org.gradle.cache.IndexedCacheParameters;
+import org.gradle.cache.LockTimeoutException;
 import org.gradle.cache.PersistentCache;
 import org.gradle.cache.internal.InMemoryCacheDecoratorFactory;
 import org.gradle.internal.execution.history.OutputFilesRepository;
@@ -32,6 +33,7 @@ import java.io.Closeable;
 import java.io.File;
 
 public class DefaultOutputFilesRepository implements OutputFilesRepository, Closeable {
+    private static final String LOCK_CONTENTION_REASON_PREFIX = "concurrency-limited:lock-contention:execution-history-output-files";
 
     private final PersistentCache cacheAccess;
     enum OutputKind {
@@ -47,8 +49,12 @@ public class DefaultOutputFilesRepository implements OutputFilesRepository, Clos
 
     @Override
     public boolean isGeneratedByGradle(File file) {
-        File absoluteFile = file.getAbsoluteFile();
-        return containsFilesGeneratedByGradle(absoluteFile) || isContainedInAnOutput(absoluteFile);
+        try {
+            File absoluteFile = file.getAbsoluteFile();
+            return containsFilesGeneratedByGradle(absoluteFile) || isContainedInAnOutput(absoluteFile);
+        } catch (LockTimeoutException e) {
+            throw withTaggedLockTimeout("query", e);
+        }
     }
 
     private boolean isContainedInAnOutput(File absoluteFile) {
@@ -68,36 +74,40 @@ public class DefaultOutputFilesRepository implements OutputFilesRepository, Clos
 
     @Override
     public void recordOutputs(Iterable<? extends FileSystemSnapshot> outputSnapshots) {
-        for (FileSystemSnapshot outputFileSnapshot : outputSnapshots) {
-            outputFileSnapshot.accept(entrySnapshot -> {
-                entrySnapshot.accept(new FileSystemLocationSnapshotVisitor() {
-                    @Override
-                    public void visitDirectory(DirectorySnapshot directorySnapshot) {
-                        recordOutputSnapshot(directorySnapshot);
-                    }
-
-                    @Override
-                    public void visitRegularFile(RegularFileSnapshot fileSnapshot) {
-                        recordOutputSnapshot(fileSnapshot);
-                    }
-
-                    private void recordOutputSnapshot(FileSystemLocationSnapshot snapshot) {
-                        String outputPath = snapshot.getAbsolutePath();
-                        File outputFile = new File(outputPath);
-                        outputFiles.put(outputPath, OutputKind.OUTPUT);
-                        File outputFileParent = outputFile.getParentFile();
-                        while (outputFileParent != null) {
-                            String parentPath = outputFileParent.getPath();
-                            if (outputFiles.getIfPresent(parentPath) != null) {
-                                break;
-                            }
-                            outputFiles.put(parentPath, OutputKind.PARENT_OF_OUTPUT);
-                            outputFileParent = outputFileParent.getParentFile();
+        try {
+            for (FileSystemSnapshot outputFileSnapshot : outputSnapshots) {
+                outputFileSnapshot.accept(entrySnapshot -> {
+                    entrySnapshot.accept(new FileSystemLocationSnapshotVisitor() {
+                        @Override
+                        public void visitDirectory(DirectorySnapshot directorySnapshot) {
+                            recordOutputSnapshot(directorySnapshot);
                         }
-                    }
+
+                        @Override
+                        public void visitRegularFile(RegularFileSnapshot fileSnapshot) {
+                            recordOutputSnapshot(fileSnapshot);
+                        }
+
+                        private void recordOutputSnapshot(FileSystemLocationSnapshot snapshot) {
+                            String outputPath = snapshot.getAbsolutePath();
+                            File outputFile = new File(outputPath);
+                            outputFiles.put(outputPath, OutputKind.OUTPUT);
+                            File outputFileParent = outputFile.getParentFile();
+                            while (outputFileParent != null) {
+                                String parentPath = outputFileParent.getPath();
+                                if (outputFiles.getIfPresent(parentPath) != null) {
+                                    break;
+                                }
+                                outputFiles.put(parentPath, OutputKind.PARENT_OF_OUTPUT);
+                                outputFileParent = outputFileParent.getParentFile();
+                            }
+                        }
+                    });
+                    return SnapshotVisitResult.SKIP_SUBTREE;
                 });
-                return SnapshotVisitResult.SKIP_SUBTREE;
-            });
+            }
+        } catch (LockTimeoutException e) {
+            throw withTaggedLockTimeout("record", e);
         }
     }
 
@@ -109,5 +119,9 @@ public class DefaultOutputFilesRepository implements OutputFilesRepository, Clos
     @Override
     public void close() {
         cacheAccess.close();
+    }
+
+    private static LockTimeoutException withTaggedLockTimeout(String operation, LockTimeoutException e) {
+        return new LockTimeoutException(LOCK_CONTENTION_REASON_PREFIX + ":" + operation + ":" + e.getMessage(), e.getLockFile());
     }
 }

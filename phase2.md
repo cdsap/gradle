@@ -77,6 +77,35 @@ Run settings:
 
 ---
 
+## Phase 2 Slice 3: Execution History Output Lock Contention Reasons
+
+Date: 2026-04-08
+
+Extended structured lock-contention diagnostics into execution-history output tracking.
+
+### Implemented
+
+- Added lock-timeout tagging in `DefaultOutputFilesRepository` for:
+  - query path (`isGeneratedByGradle`)
+  - record path (`recordOutputs`)
+- Tag format:
+  - `concurrency-limited:lock-contention:execution-history-output-files:<query|record>:...`
+- Preserved original lock-file information on wrapped `LockTimeoutException`.
+
+Changed files:
+
+- `platforms/core-execution/execution/src/main/java/org/gradle/internal/execution/history/impl/DefaultOutputFilesRepository.java`
+- `platforms/core-execution/execution/src/test/groovy/org/gradle/internal/execution/history/impl/DefaultOutputFilesRepositoryTest.groovy`
+
+### Validation
+
+Executed successfully:
+
+- `execution:test --tests org.gradle.internal.execution.history.impl.DefaultOutputFilesRepositoryTest`
+- `build-cache-local:test --tests org.gradle.caching.local.internal.DirectoryBuildCacheTest` (regression check for Slice 2)
+
+---
+
 ## Outcome
 
 Phase 2 Slice 1 improves practical observability of concurrency limits:

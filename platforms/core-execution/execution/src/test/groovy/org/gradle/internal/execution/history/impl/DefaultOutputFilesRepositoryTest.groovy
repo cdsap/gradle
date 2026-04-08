@@ -18,6 +18,8 @@ package org.gradle.internal.execution.history.impl
 
 import org.gradle.api.internal.file.TestFiles
 import org.gradle.cache.CacheDecorator
+import org.gradle.cache.IndexedCache
+import org.gradle.cache.LockTimeoutException
 import org.gradle.cache.PersistentCache
 import org.gradle.cache.internal.DefaultInMemoryCacheDecoratorFactory
 import org.gradle.internal.serialize.BaseSerializerFactory
@@ -67,6 +69,44 @@ class DefaultOutputFilesRepositoryTest extends Specification {
         !repository.isGeneratedByGradle(file('build/other'))
         !repository.isGeneratedByGradle(file('build/outputs/other'))
         !repository.isGeneratedByGradle(file('build/not-existing'))
+    }
+
+    def "tags lock timeout when querying generated outputs"() {
+        given:
+        def lockFile = tmpDir.file("output-files.lock")
+        def indexedCache = Mock(IndexedCache)
+        def cacheAccess = Stub(PersistentCache) {
+            createIndexedCache(_) >> indexedCache
+        }
+        def repository = new DefaultOutputFilesRepository(cacheAccess, inMemoryCacheDecoratorFactory)
+        indexedCache.getIfPresent(_) >> { throw new LockTimeoutException("Timed out querying output files cache", lockFile) }
+
+        when:
+        repository.isGeneratedByGradle(file("build/any"))
+
+        then:
+        def ex = thrown(LockTimeoutException)
+        ex.message.contains("concurrency-limited:lock-contention:execution-history-output-files:query:")
+        ex.lockFile == lockFile
+    }
+
+    def "tags lock timeout when recording outputs"() {
+        given:
+        def lockFile = tmpDir.file("output-files.lock")
+        def indexedCache = Mock(IndexedCache)
+        def cacheAccess = Stub(PersistentCache) {
+            createIndexedCache(_) >> indexedCache
+        }
+        def repository = new DefaultOutputFilesRepository(cacheAccess, inMemoryCacheDecoratorFactory)
+        indexedCache.put(_, _) >> { throw new LockTimeoutException("Timed out recording output files cache", lockFile) }
+
+        when:
+        repository.recordOutputs([snapshot(tmpDir.createFile("build/file"))])
+
+        then:
+        def ex = thrown(LockTimeoutException)
+        ex.message.contains("concurrency-limited:lock-contention:execution-history-output-files:record:")
+        ex.lockFile == lockFile
     }
 
     private File file(String path) {
