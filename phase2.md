@@ -106,6 +106,36 @@ Executed successfully:
 
 ---
 
+## Phase 2 Slice 4: Execution History Store Lock Contention Reasons
+
+Date: 2026-04-08
+
+Extended structured lock-contention diagnostics into execution-history state storage operations.
+
+### Implemented
+
+- Added lock-timeout tagging in `DefaultExecutionHistoryStore` for:
+  - `load`
+  - `store`
+  - `remove`
+- Tag format:
+  - `concurrency-limited:lock-contention:execution-history-store:<load|store|remove>:...`
+- Preserved original lock-file information on wrapped `LockTimeoutException`.
+- Added focused unit tests for the three tagged operations.
+
+Changed files:
+
+- `platforms/core-execution/execution/src/main/java/org/gradle/internal/execution/history/impl/DefaultExecutionHistoryStore.java`
+- `platforms/core-execution/execution/src/test/groovy/org/gradle/internal/execution/history/impl/DefaultExecutionHistoryStoreTest.groovy`
+
+### Validation
+
+Executed successfully:
+
+- `execution:test --tests org.gradle.internal.execution.history.impl.DefaultExecutionHistoryStoreTest --tests org.gradle.internal.execution.history.impl.DefaultOutputFilesRepositoryTest`
+
+---
+
 ## Outcome
 
 Phase 2 Slice 1 improves practical observability of concurrency limits:

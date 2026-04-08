@@ -21,6 +21,7 @@ import com.google.common.collect.Interner;
 import org.gradle.cache.CacheDecorator;
 import org.gradle.cache.IndexedCache;
 import org.gradle.cache.IndexedCacheParameters;
+import org.gradle.cache.LockTimeoutException;
 import org.gradle.cache.PersistentCache;
 import org.gradle.cache.internal.InMemoryCacheDecoratorFactory;
 import org.gradle.internal.execution.history.AfterExecutionState;
@@ -38,6 +39,7 @@ import static com.google.common.collect.ImmutableSortedMap.copyOfSorted;
 import static com.google.common.collect.Maps.transformValues;
 
 public class DefaultExecutionHistoryStore implements ExecutionHistoryStore {
+    private static final String LOCK_CONTENTION_REASON_PREFIX = "concurrency-limited:lock-contention:execution-history-store";
 
     private final IndexedCache<String, PreviousExecutionState> store;
 
@@ -63,26 +65,38 @@ public class DefaultExecutionHistoryStore implements ExecutionHistoryStore {
 
     @Override
     public Optional<PreviousExecutionState> load(String key) {
-        return Optional.ofNullable(store.getIfPresent(key));
+        try {
+            return Optional.ofNullable(store.getIfPresent(key));
+        } catch (LockTimeoutException e) {
+            throw withTaggedLockTimeout("load", e);
+        }
     }
 
     @Override
     public void store(String key, AfterExecutionState executionState) {
-        store.put(key, new DefaultPreviousExecutionState(
-            executionState.getOriginMetadata(),
-            executionState.getCacheKey(),
-            executionState.getImplementation(),
-            executionState.getAdditionalImplementations(),
-            executionState.getInputProperties(),
-            prepareForSerialization(executionState.getInputFileProperties()),
-            executionState.getOutputFilesProducedByWork(),
-            executionState.isSuccessful()
-        ));
+        try {
+            store.put(key, new DefaultPreviousExecutionState(
+                executionState.getOriginMetadata(),
+                executionState.getCacheKey(),
+                executionState.getImplementation(),
+                executionState.getAdditionalImplementations(),
+                executionState.getInputProperties(),
+                prepareForSerialization(executionState.getInputFileProperties()),
+                executionState.getOutputFilesProducedByWork(),
+                executionState.isSuccessful()
+            ));
+        } catch (LockTimeoutException e) {
+            throw withTaggedLockTimeout("store", e);
+        }
     }
 
     @Override
     public void remove(String key) {
-        store.remove(key);
+        try {
+            store.remove(key);
+        } catch (LockTimeoutException e) {
+            throw withTaggedLockTimeout("remove", e);
+        }
     }
 
     private static ImmutableSortedMap<String, FileCollectionFingerprint> prepareForSerialization(ImmutableSortedMap<String, CurrentFileCollectionFingerprint> fingerprints) {
@@ -90,5 +104,9 @@ public class DefaultExecutionHistoryStore implements ExecutionHistoryStore {
             fingerprints,
             value -> value.archive(SerializableFileCollectionFingerprint::new)
         ));
+    }
+
+    private static LockTimeoutException withTaggedLockTimeout(String operation, LockTimeoutException e) {
+        return new LockTimeoutException(LOCK_CONTENTION_REASON_PREFIX + ":" + operation + ":" + e.getMessage(), e.getLockFile());
     }
 }
