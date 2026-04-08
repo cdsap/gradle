@@ -235,4 +235,26 @@ class DaemonClientTest extends ConcurrentSpecification {
         exception.causes.size() == 2
         exception.causes.every { it instanceof DaemonUnavailableConnectException }
     }
+
+    def "aggregates concurrency-limited categories when daemon reasons differ"() {
+        given:
+        DaemonClientConnection connection2 = Mock()
+        DaemonClientConnection connection3 = Mock()
+        connector.connect(compatibilitySpec) >>> [connection, connection2, null]
+        connector.startDaemon(compatibilitySpec) >> connection3
+        connection.daemon >> Stub(DaemonConnectDetails)
+        connection2.daemon >> Stub(DaemonConnectDetails)
+        connection3.daemon >> Stub(DaemonConnectDetails)
+        connection.receive() >> new DaemonUnavailable("concurrency-limited:daemon-availability:already building")
+        connection2.receive() >> new DaemonUnavailable("concurrency-limited:lock-contention:configuration-cache:shared:timeout")
+        connection3.receive() >> new DaemonUnavailable("concurrency-limited:lock-contention:configuration-cache:shared:timeout")
+
+        when:
+        client.execute(Stub(BuildAction), Stub(BuildActionParameters), Stub(ClientBuildRequestContext))
+
+        then:
+        def exception = thrown(NoUsableDaemonFoundException)
+        exception.message.contains("concurrency-limited categories while connecting: total=3, daemon-availability x1, lock-contention x2")
+        exception.message.contains("concurrency-limited reasons while connecting: concurrency-limited:daemon-availability:already building x1, concurrency-limited:lock-contention:configuration-cache:shared:timeout x2")
+    }
 }
