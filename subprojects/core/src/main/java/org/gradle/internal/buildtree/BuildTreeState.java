@@ -27,12 +27,14 @@ import org.gradle.internal.service.scopes.Scope;
 import org.gradle.internal.service.scopes.ServiceScope;
 
 import java.io.Closeable;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Encapsulates the state for a particular build tree.
  */
 @ServiceScope(Scope.BuildTree.class)
 public class BuildTreeState implements Closeable {
+    private final AtomicBoolean closed = new AtomicBoolean(false);
     private final ServiceRegistry services;
 
     public BuildTreeState(
@@ -74,6 +76,9 @@ public class BuildTreeState implements Closeable {
 
     @Override
     public void close() {
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
         try {
             CompositeStoppable.stoppable(services).stop();
         } finally {

@@ -31,6 +31,7 @@ dependencies {
     testImplementation(projects.messaging)
     testImplementation(projects.coreApi)
     testImplementation(projects.functional)
+    testImplementation(testFixtures(projects.buildOperations))
     testImplementation(testFixtures(projects.core))
 
     testRuntimeOnly(projects.distributionsCore) {
