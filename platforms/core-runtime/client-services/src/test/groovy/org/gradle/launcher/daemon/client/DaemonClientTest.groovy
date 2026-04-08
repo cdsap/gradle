@@ -216,9 +216,9 @@ class DaemonClientTest extends ConcurrentSpecification {
         connector.connect(compatibilitySpec) >>> [connection, null]
         connector.startDaemon(compatibilitySpec) >>> [connection2, connection3]
         connection.daemon >> Stub(DaemonConnectDetails)
-        connection.receive() >> Mock(DaemonUnavailable)
+        connection.receive() >> new DaemonUnavailable("concurrency-limited:daemon-availability:already building")
         connection2.daemon >> Stub(DaemonConnectDetails)
-        connection2.receive() >> Mock(DaemonUnavailable)
+        connection2.receive() >> new DaemonUnavailable("concurrency-limited:daemon-availability:already building")
 
         when:
         client.execute(Stub(BuildAction), Stub(BuildActionParameters), Stub(ClientBuildRequestContext))
@@ -229,7 +229,9 @@ class DaemonClientTest extends ConcurrentSpecification {
         0 * connection3.stop()
         def exception = thrown(NoUsableDaemonFoundException)
         exception.message.contains 'A new daemon was started but could not be connected to. This is unexpected.'
+        exception.message.contains 'concurrency-limited reasons while connecting: concurrency-limited:daemon-availability:already building x2'
         exception.resolutions[0].contains new DocumentationRegistry().getDocumentationRecommendationFor("information", "troubleshooting", "network_connection")
         exception.causes.size() == 2
+        exception.causes.every { it instanceof DaemonUnavailableConnectException }
     }
 }

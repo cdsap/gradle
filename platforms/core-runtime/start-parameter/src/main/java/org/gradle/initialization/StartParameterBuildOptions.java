@@ -82,6 +82,7 @@ public class StartParameterBuildOptions extends BuildOptionSet<StartParameterInt
         new ConfigurationCacheIgnoredFileSystemCheckInputs(),
         new ConfigurationCacheDebugOption(),
         new ConfigurationCacheParallelOption(),
+        new ConcurrentInvocationsOption(),
         new ConfigurationCacheReadOnlyOption(),
         new ConfigurationCacheRecreateOption(),
         new ConfigurationCacheQuietOption(),
@@ -814,6 +815,29 @@ public class StartParameterBuildOptions extends BuildOptionSet<StartParameterInt
         @Override
         public void applyTo(boolean value, StartParameterInternal settings, Origin origin) {
             settings.setConfigurationCacheParallel(value);
+        }
+    }
+
+    /**
+     * Enables a concurrency-aware execution mode intended for multiple concurrent Gradle invocations
+     * on the same machine.
+     */
+    public static class ConcurrentInvocationsOption extends BooleanBuildOption<StartParameterInternal> {
+
+        public static final String PROPERTY_NAME = "org.gradle.concurrent.invocations";
+
+        public ConcurrentInvocationsOption() {
+            super(PROPERTY_NAME);
+        }
+
+        @Override
+        public void applyTo(boolean value, StartParameterInternal settings, Origin origin) {
+            settings.setConcurrentInvocationModeEnabled(value);
+        }
+
+        @Override
+        protected OptionCategory getCategory() {
+            return OptionCategory.PERFORMANCE;
         }
     }
 

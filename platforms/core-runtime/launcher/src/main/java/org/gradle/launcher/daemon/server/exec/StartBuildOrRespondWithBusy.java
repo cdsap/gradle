@@ -31,7 +31,8 @@ import org.gradle.launcher.daemon.server.api.DaemonUnavailableException;
  * Updates the daemon idle/busy status, sending a DaemonUnavailable result back to the client if the daemon is busy.
  */
 public class StartBuildOrRespondWithBusy extends BuildCommandOnly {
-    
+
+    public static final String DAEMON_AVAILABILITY_LIMIT_REASON = "daemon-availability";
     private static final Logger LOGGER = Logging.getLogger(StartBuildOrRespondWithBusy.class);
     private final DaemonDiagnostics diagnostics;
 
@@ -56,9 +57,13 @@ public class StartBuildOrRespondWithBusy extends BuildCommandOnly {
             stateCoordinator.runCommand(command, execution.toString());
         } catch (DaemonUnavailableException e) {
             LOGGER.info("Daemon will not handle the command {} because is unavailable: {}", build, e.getMessage());
-            execution.getConnection().daemonUnavailable(new DaemonUnavailable(e.getMessage()));
+            execution.getConnection().daemonUnavailable(new DaemonUnavailable(formatDaemonUnavailableReason(e.getMessage())));
         } catch (DaemonStoppedException e) {
             execution.getConnection().completed(new Failure(e));
         }
+    }
+
+    private static String formatDaemonUnavailableReason(String reason) {
+        return "concurrency-limited:" + DAEMON_AVAILABILITY_LIMIT_REASON + ":" + (reason == null ? "unknown" : reason);
     }
 }

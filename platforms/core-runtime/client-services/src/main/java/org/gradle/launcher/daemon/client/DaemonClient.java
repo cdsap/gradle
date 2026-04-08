@@ -54,9 +54,12 @@ import org.gradle.launcher.exec.BuildActionResult;
 import java.io.File;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * The client piece of the build daemon.
@@ -141,6 +144,7 @@ public class DaemonClient implements BuildActionExecutor<BuildActionParameters, 
     public BuildActionResult execute(BuildAction action, BuildActionParameters parameters, ClientBuildRequestContext requestContext) {
         UUID buildId = idGenerator.generateId();
         List<DaemonInitialConnectException> accumulatedExceptions = new ArrayList<>();
+        Map<String, Integer> daemonUnavailableReasons = new LinkedHashMap<>();
 
         LOGGER.debug("Executing build {} in daemon client {pid={}}", buildId, processEnvironment.maybeGetPid());
 
@@ -160,9 +164,20 @@ public class DaemonClient implements BuildActionExecutor<BuildActionParameters, 
                 // this exception means that we want to try again.
                 LOGGER.debug("{}, Trying a different daemon...", e.getMessage());
                 accumulatedExceptions.add(e);
+                if (e instanceof DaemonUnavailableConnectException) {
+                    String reason = ((DaemonUnavailableConnectException) e).getReason();
+                    daemonUnavailableReasons.merge(reason, 1, Integer::sum);
+                }
             } finally {
                 connection.stop();
             }
+        }
+
+        if (!daemonUnavailableReasons.isEmpty()) {
+            LOGGER.lifecycle(
+                "Concurrency is currently limited while connecting to daemons: {}. Trying to start a new daemon.",
+                formatDaemonUnavailableReasons(daemonUnavailableReasons)
+            );
         }
 
         // No existing daemon was usable, so start a new one and try it once
@@ -173,12 +188,41 @@ public class DaemonClient implements BuildActionExecutor<BuildActionParameters, 
         } catch (DaemonInitialConnectException e) {
             // This means we could not connect to the daemon we just started.  fail and don't try again
             accumulatedExceptions.add(e);
-            throw new NoUsableDaemonFoundException("A new daemon was started but could not be connected to. This is unexpected.\n" +
-                "diagnostics: " + connection.getDaemon(),
-                accumulatedExceptions);
+            throw new NoUsableDaemonFoundException(
+                noUsableDaemonMessage(connection, accumulatedExceptions),
+                accumulatedExceptions
+            );
         } finally {
             connection.stop();
         }
+    }
+
+    private static String noUsableDaemonMessage(DaemonClientConnection connection, List<DaemonInitialConnectException> accumulatedExceptions) {
+        StringBuilder message = new StringBuilder("A new daemon was started but could not be connected to. This is unexpected.\n")
+            .append("diagnostics: ").append(connection.getDaemon());
+        Map<String, Integer> daemonUnavailableReasons = collectDaemonUnavailableReasons(accumulatedExceptions);
+        if (!daemonUnavailableReasons.isEmpty()) {
+            message.append("\nconcurrency-limited reasons while connecting: ")
+                .append(formatDaemonUnavailableReasons(daemonUnavailableReasons));
+        }
+        return message.toString();
+    }
+
+    private static Map<String, Integer> collectDaemonUnavailableReasons(List<DaemonInitialConnectException> accumulatedExceptions) {
+        Map<String, Integer> reasons = new LinkedHashMap<>();
+        for (DaemonInitialConnectException exception : accumulatedExceptions) {
+            if (exception instanceof DaemonUnavailableConnectException) {
+                String reason = ((DaemonUnavailableConnectException) exception).getReason();
+                reasons.merge(reason, 1, Integer::sum);
+            }
+        }
+        return reasons;
+    }
+
+    private static String formatDaemonUnavailableReasons(Map<String, Integer> reasons) {
+        return reasons.entrySet().stream()
+            .map(entry -> entry.getKey() + " x" + entry.getValue())
+            .collect(Collectors.joining(", "));
     }
 
     protected BuildActionResult executeBuild(Build build, DaemonClientConnection connection, BuildCancellationToken cancellationToken, BuildEventConsumer buildEventConsumer) throws DaemonInitialConnectException {
@@ -227,7 +271,8 @@ public class DaemonClient implements BuildActionExecutor<BuildActionParameters, 
             }
             throw UncheckedException.throwAsUncheckedException(failure);
         } else if (result instanceof DaemonUnavailable) {
-            throw new DaemonInitialConnectException("The daemon we connected to was unavailable: " + ((DaemonUnavailable) result).getReason());
+            String reason = ((DaemonUnavailable) result).getReason();
+            throw new DaemonUnavailableConnectException(reason == null ? "unknown" : reason);
         } else if (result instanceof Result) {
             return (BuildActionResult) ((Result) result).getValue();
         } else {

@@ -27,6 +27,7 @@ internal sealed class AbstractBuildModelParameters : BuildModelParameters {
         "configurationCacheDisabledReason" to configurationCacheDisabledReason,
         "configurationCacheParallelLoad" to isConfigurationCacheParallelLoad,
         "configurationCacheParallelStore" to isConfigurationCacheParallelStore,
+        "concurrentInvocationModeEnabled" to isConcurrentInvocationModeEnabled,
         "configureOnDemand" to isConfigureOnDemand,
         "invalidateCoupledProjects" to isInvalidateCoupledProjects,
         "isolatedProjects" to isIsolatedProjects,
@@ -44,6 +45,7 @@ internal class GradleVintageMode(
     private val parallelProjectExecution: Boolean,
     private val configureOnDemand: Boolean,
     private val configurationCacheDisabledReason: String?,
+    private val concurrentInvocationModeEnabled: Boolean,
     private val parallelModelBuilding: Boolean,
     private val resilientModelBuilding: Boolean,
 ) : AbstractBuildModelParameters() {
@@ -56,6 +58,7 @@ internal class GradleVintageMode(
     override fun getConfigurationCacheDisabledReason(): String? = configurationCacheDisabledReason
     override fun isConfigurationCacheParallelStore(): Boolean = false
     override fun isConfigurationCacheParallelLoad(): Boolean = false
+    override fun isConcurrentInvocationModeEnabled(): Boolean = concurrentInvocationModeEnabled
 
     override fun isIsolatedProjects(): Boolean = false
     override fun isParallelProjectConfiguration(): Boolean = false
@@ -75,6 +78,7 @@ internal class GradleConfigurationCacheMode(
     private val configureOnDemand: Boolean,
     private val configurationCacheParallelStore: Boolean,
     private val configurationCacheParallelLoad: Boolean,
+    private val concurrentInvocationModeEnabled: Boolean,
 ) : AbstractBuildModelParameters() {
 
     override fun isParallelProjectExecution(): Boolean = parallelProjectExecution
@@ -85,6 +89,7 @@ internal class GradleConfigurationCacheMode(
     override fun getConfigurationCacheDisabledReason(): String? = null
     override fun isConfigurationCacheParallelStore(): Boolean = configurationCacheParallelStore
     override fun isConfigurationCacheParallelLoad(): Boolean = configurationCacheParallelLoad
+    override fun isConcurrentInvocationModeEnabled(): Boolean = concurrentInvocationModeEnabled
 
     override fun isIsolatedProjects(): Boolean = false
     override fun isParallelProjectConfiguration(): Boolean = false
@@ -104,6 +109,7 @@ internal class GradleIsolatedProjectsMode(
     private val parallelProjectExecution: Boolean,
     private val configureOnDemand: Boolean,
     private val configurationCacheParallelStore: Boolean,
+    private val concurrentInvocationModeEnabled: Boolean,
     private val parallelProjectConfiguration: Boolean,
     private val cachingModelBuilding: Boolean,
     private val parallelModelBuilding: Boolean,
@@ -120,6 +126,7 @@ internal class GradleIsolatedProjectsMode(
     override fun getConfigurationCacheDisabledReason(): String? = null
     override fun isConfigurationCacheParallelStore(): Boolean = configurationCacheParallelStore
     override fun isConfigurationCacheParallelLoad(): Boolean = true
+    override fun isConcurrentInvocationModeEnabled(): Boolean = concurrentInvocationModeEnabled
 
     override fun isIsolatedProjects(): Boolean = true
     override fun isParallelProjectConfiguration(): Boolean = parallelProjectConfiguration
@@ -133,4 +140,3 @@ internal class GradleIsolatedProjectsMode(
 
     override fun toString(): String = "GradleIsolatedProjectsMode"
 }
-

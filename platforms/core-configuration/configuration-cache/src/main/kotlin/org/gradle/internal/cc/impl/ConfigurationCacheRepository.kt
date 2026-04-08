@@ -23,13 +23,16 @@ import org.gradle.cache.CacheBuilder
 import org.gradle.cache.CacheCleanupStrategyFactory
 import org.gradle.cache.CleanupAction
 import org.gradle.cache.CleanupProgressMonitor
+import org.gradle.cache.FileLock
 import org.gradle.cache.FileLockManager
 import org.gradle.cache.internal.FilesFinder
 import org.gradle.cache.internal.LeastRecentlyUsedCacheCleanup
 import org.gradle.cache.internal.SingleDepthFilesFinder
+import org.gradle.cache.internal.filelock.DefaultLockOptions
 import org.gradle.cache.internal.streams.DefaultValueStore
 import org.gradle.cache.internal.streams.ValueStore
 import org.gradle.cache.scopes.BuildTreeScopedCacheBuilderFactory
+import org.gradle.internal.buildtree.BuildModelParameters
 import org.gradle.internal.cc.impl.ConfigurationCacheRepository.ReadableConfigurationCacheStateFile
 import org.gradle.internal.cc.impl.ConfigurationCacheStateStore.StateFile
 import org.gradle.internal.concurrent.Stoppable
@@ -57,8 +60,12 @@ class ConfigurationCacheRepository(
     cacheBuilderFactory: BuildTreeScopedCacheBuilderFactory,
     private val cacheCleanupStrategyFactory: CacheCleanupStrategyFactory,
     private val fileAccessTimeJournal: FileAccessTimeJournal,
-    private val fileSystem: FileSystem
+    private val fileSystem: FileSystem,
+    private val fileLockManager: FileLockManager,
+    modelParameters: BuildModelParameters
 ) : Stoppable {
+    private
+    val concurrentInvocationModeEnabled = modelParameters.isConcurrentInvocationModeEnabled
 
     fun forKey(cacheKey: String): ConfigurationCacheStateStore {
         return StoreImpl(dirForEntry(cacheKey))
@@ -232,7 +239,7 @@ class ConfigurationCacheRepository(
         }
 
         override fun <T : Any> useForStateLoad(action: Layout.() -> T): ConfigurationCacheStateStore.StateAccessResult<T> {
-            return withExclusiveAccessToCache(baseDir) { cacheDir ->
+            return withAccessForStateLoad(baseDir) { cacheDir ->
                 markAccessed(cacheDir)
                 // this needs to be thread-safe as we may have multiple adding threads
                 val stateFiles = Collections.synchronizedList(mutableListOf<File>())
@@ -242,7 +249,7 @@ class ConfigurationCacheRepository(
         }
 
         override fun <T> useForStore(action: Layout.() -> T): ConfigurationCacheStateStore.StateAccessResult<T> =
-            withExclusiveAccessToCache(baseDir) { cacheDir ->
+            withAccessForStore(baseDir) { cacheDir ->
                 if (!cacheDir.isDirectory) {
                     Files.createDirectories(cacheDir.toPath())
                     chmod(cacheDir, 448) // octal 0700
@@ -315,12 +322,44 @@ class ConfigurationCacheRepository(
     }
 
     private
-    fun <T : Any> withExclusiveAccessToCache(baseDir: File, action: (File) -> T): T =
-        cache.withFileLock(
-            Supplier {
-                action(baseDir)
+    fun <T> withExclusiveAccessToCache(baseDir: File, action: (File) -> T): T {
+        return CacheAccessOperations.withFileLock(cache) { action(baseDir) }
+    }
+
+    private
+    fun <T : Any> withAccessForStateLoad(baseDir: File, action: (File) -> T): T =
+        if (concurrentInvocationModeEnabled) {
+            withConcurrentInvocationLock(FileLockManager.LockMode.Shared) {
+                it.readFile(Supplier { action(baseDir) })
             }
+        } else {
+            withExclusiveAccessToCache(baseDir, action)
+        }
+
+    private
+    fun <T> withAccessForStore(baseDir: File, action: (File) -> T): T =
+        if (concurrentInvocationModeEnabled) {
+            withConcurrentInvocationLock(FileLockManager.LockMode.Exclusive) {
+                CacheAccessOperations.withWriteFileLock(it, Supplier { action(baseDir) })
+            }
+        } else {
+            withExclusiveAccessToCache(baseDir, action)
+        }
+
+    private
+    fun <T> withConcurrentInvocationLock(lockMode: FileLockManager.LockMode, action: (FileLock) -> T): T {
+        val lockTarget = cache.baseDir.resolve(".concurrent-invocation-access")
+        val lock = fileLockManager.lock(
+            lockTarget,
+            DefaultLockOptions.mode(lockMode),
+            "configuration cache concurrent invocation lock"
         )
+        return try {
+            action(lock)
+        } finally {
+            lock.close()
+        }
+    }
 
     private
     fun dirForEntry(cacheKey: String) =

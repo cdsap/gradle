@@ -108,6 +108,19 @@ class StartParameterConverterTest extends Specification {
         parameter.getConfigurationCache().get()
     }
 
+    def "can enable concurrent invocation mode via system property on command-line"() {
+        expect:
+        def parameter = convert("-Dorg.gradle.concurrent.invocations=true")
+        parameter.concurrentInvocationModeEnabled
+    }
+
+    def "can enable concurrent invocation mode via persistent property"() {
+        expect:
+        userHome.file("gradle.properties") << "org.gradle.concurrent.invocations=true"
+        def parameter = convert()
+        parameter.concurrentInvocationModeEnabled
+    }
+
     def "system property on command-line has precedence over persistent property"() {
         expect:
         userHome.file("gradle.properties") << "org.gradle.workers.max=123"

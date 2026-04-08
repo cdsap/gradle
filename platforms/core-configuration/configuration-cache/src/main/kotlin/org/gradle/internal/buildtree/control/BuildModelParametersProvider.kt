@@ -122,6 +122,7 @@ object BuildModelParametersProvider {
             parallelProjectExecution = startParameter.isParallelProjectExecutionEnabled,
             configureOnDemand = startParameter.isConfigureOnDemand,
             configurationCacheDisabledReason = null,
+            concurrentInvocationModeEnabled = startParameter.isConcurrentInvocationModeEnabled,
             parallelModelBuilding = false,
             resilientModelBuilding = false
         )
@@ -143,6 +144,7 @@ object BuildModelParametersProvider {
                 parallelProjectExecution = parallelProjectExecution || parallelModelBuilding,
                 configureOnDemand = false,
                 configurationCacheDisabledReason = ccDisabledReason,
+                concurrentInvocationModeEnabled = startParameter.isConcurrentInvocationModeEnabled,
                 parallelModelBuilding = parallelModelBuilding,
                 resilientModelBuilding = options[resilientModelBuilding],
             )
@@ -152,6 +154,7 @@ object BuildModelParametersProvider {
                 parallelProjectExecution = parallelProjectExecution,
                 configureOnDemand = startParameter.isConfigureOnDemand,
                 configurationCacheDisabledReason = ccDisabledReason,
+                concurrentInvocationModeEnabled = startParameter.isConcurrentInvocationModeEnabled,
                 parallelModelBuilding = false,
                 resilientModelBuilding = false,
             )
@@ -183,6 +186,7 @@ object BuildModelParametersProvider {
             configureOnDemand = startParameter.isConfigureOnDemand,
             configurationCacheParallelStore = startParameter.isConfigurationCacheParallel && options[configurationCacheParallelStore],
             configurationCacheParallelLoad = options[configurationCacheParallelLoad],
+            concurrentInvocationModeEnabled = startParameter.isConcurrentInvocationModeEnabled,
         )
     }
 
@@ -209,6 +213,7 @@ object BuildModelParametersProvider {
                 parallelProjectExecution = parallelIsolatedProjects,
                 configureOnDemand = configureOnDemand,
                 configurationCacheParallelStore = parallelConfigurationCacheStore,
+                concurrentInvocationModeEnabled = startParameter.isConcurrentInvocationModeEnabled,
                 parallelProjectConfiguration = parallelIsolatedProjects,
                 cachingModelBuilding = options[isolatedProjectsCaching].buildingModels,
                 parallelModelBuilding = parallelIsolatedProjects,
@@ -222,6 +227,7 @@ object BuildModelParametersProvider {
                 parallelProjectExecution = parallelIsolatedProjects,
                 configureOnDemand = configureOnDemand,
                 configurationCacheParallelStore = parallelConfigurationCacheStore,
+                concurrentInvocationModeEnabled = startParameter.isConcurrentInvocationModeEnabled,
                 parallelProjectConfiguration = parallelIsolatedProjects,
                 cachingModelBuilding = false,
                 parallelModelBuilding = false,

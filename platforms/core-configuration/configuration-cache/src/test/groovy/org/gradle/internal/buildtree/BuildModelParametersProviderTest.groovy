@@ -36,6 +36,7 @@ class BuildModelParametersProviderTest extends Specification {
             configurationCacheDisabledReason: null,
             configurationCacheParallelStore: false,
             configurationCacheParallelLoad: false,
+            concurrentInvocationModeEnabled: false,
 
             isolatedProjects: false,
             parallelProjectConfiguration: false,

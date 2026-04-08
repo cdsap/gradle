@@ -56,6 +56,11 @@ public interface BuildModelParameters {
 
     boolean isConfigurationCacheParallelLoad();
 
+    /**
+     * Whether concurrency-aware behavior for concurrent Gradle invocations has been explicitly enabled.
+     */
+    boolean isConcurrentInvocationModeEnabled();
+
     boolean isIsolatedProjects();
 
     /**

@@ -45,6 +45,9 @@ internal class DefaultBuildModelParametersFactory : BuildModelParametersFactory 
                 IncubationLogger.incubatingFeatureUsed("Configuration on demand")
             }
         }
+        if (modelParameters.isConcurrentInvocationModeEnabled) {
+            IncubationLogger.incubatingFeatureUsed("Concurrent invocation mode")
+        }
 
         return modelParameters
     }

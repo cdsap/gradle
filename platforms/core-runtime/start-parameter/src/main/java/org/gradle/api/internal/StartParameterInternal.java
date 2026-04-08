@@ -58,6 +58,7 @@ public class StartParameterInternal extends StartParameter {
     private boolean enableProblemReportGeneration = true;
     private boolean daemonJvmCriteriaConfigured = false;
     private Option.Value<Boolean> parallelToolingModelBuilding = Option.Value.defaultValue(false);
+    private boolean concurrentInvocationModeEnabled;
     private @Nullable String develocityUrl;
     private @Nullable String develocityPluginVersion;
 
@@ -103,6 +104,7 @@ public class StartParameterInternal extends StartParameter {
         p.enableProblemReportGeneration = enableProblemReportGeneration;
         p.daemonJvmCriteriaConfigured = daemonJvmCriteriaConfigured;
         p.parallelToolingModelBuilding = parallelToolingModelBuilding;
+        p.concurrentInvocationModeEnabled = concurrentInvocationModeEnabled;
         return p;
     }
 
@@ -342,6 +344,14 @@ public class StartParameterInternal extends StartParameter {
 
     public void setParallelToolingModelBuilding(Option.Value<Boolean> parallelToolingModelBuilding) {
         this.parallelToolingModelBuilding = parallelToolingModelBuilding;
+    }
+
+    public boolean isConcurrentInvocationModeEnabled() {
+        return concurrentInvocationModeEnabled;
+    }
+
+    public void setConcurrentInvocationModeEnabled(boolean concurrentInvocationModeEnabled) {
+        this.concurrentInvocationModeEnabled = concurrentInvocationModeEnabled;
     }
 
     @Nullable
