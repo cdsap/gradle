@@ -31,9 +31,11 @@ import org.gradle.cache.internal.filelock.LockState;
 import org.gradle.cache.internal.filelock.LockStateAccess;
 import org.gradle.cache.internal.filelock.LockStateSerializer;
 import org.gradle.cache.internal.filelock.Version1LockStateSerializer;
+import org.gradle.api.logging.Logging;
 import org.gradle.cache.internal.locklistener.FileLockContentionHandler;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.concurrent.CompositeStoppable;
+import org.gradle.internal.concurrent.ConcurrentBuildInvocationContext;
 import org.gradle.internal.concurrent.Stoppable;
 import org.gradle.internal.os.OperatingSystem;
 import org.gradle.internal.time.ExponentialBackoff;
@@ -64,6 +66,7 @@ import static org.gradle.internal.UncheckedException.throwAsUncheckedException;
  */
 public class DefaultFileLockManager implements FileLockManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultFileLockManager.class);
+    private static final org.gradle.api.logging.Logger GRADLE_LOG = Logging.getLogger(DefaultFileLockManager.class);
     public static final int DEFAULT_LOCK_TIMEOUT = 60000;
 
     private final Set<File> lockedFiles = new CopyOnWriteArraySet<>();
@@ -475,14 +478,39 @@ public class DefaultFileLockManager implements FileLockManager {
         private FileLockOutcome lockStateRegion(final LockMode lockMode) throws IOException, InterruptedException {
             final ExponentialBackoff<AwaitableFileLockReleasedSignal> backoff = newExponentialBackoff(lockTimeoutMs);
             return backoff.retryUntil(new ExponentialBackoff.Query<FileLockOutcome>() {
+                private static final long CONCURRENT_DIAGNOSTIC_FIRST_MS = 1000;
+                private static final long CONCURRENT_DIAGNOSTIC_INTERVAL_MS = 5000;
                 private long lastPingTime;
                 private int lastLockHolderPort;
+                private long lastContentionDiagnosticMs = -1;
 
                 @Override
                 public ExponentialBackoff.Result<FileLockOutcome> run() throws IOException, InterruptedException {
                     FileLockOutcome lockOutcome = lockFileAccess.tryLockState(lockMode == LockMode.Shared);
                     if (lockOutcome.isLockWasAcquired()) {
                         return ExponentialBackoff.Result.successful(lockOutcome);
+                    }
+                    if (ConcurrentBuildInvocationContext.isEnabled()) {
+                        long elapsedMs = backoff.getTimer().getElapsedMillis();
+                        if (elapsedMs >= CONCURRENT_DIAGNOSTIC_FIRST_MS) {
+                            if (lastContentionDiagnosticMs < 0) {
+                                lastContentionDiagnosticMs = elapsedMs;
+                                String op = operationDisplayName.isEmpty() ? "" : " for " + operationDisplayName;
+                                GRADLE_LOG.lifecycle(
+                                    "Concurrent invocations: waiting for {} lock on '{}' ({} ms). Another process may hold the shared Gradle user home.",
+                                    lockMode.toString().toLowerCase(Locale.ROOT) + op,
+                                    displayName,
+                                    elapsedMs
+                                );
+                            } else if (elapsedMs - lastContentionDiagnosticMs >= CONCURRENT_DIAGNOSTIC_INTERVAL_MS) {
+                                lastContentionDiagnosticMs = elapsedMs;
+                                GRADLE_LOG.lifecycle(
+                                    "Concurrent invocations: still waiting for file lock on '{}' ({} ms).",
+                                    displayName,
+                                    elapsedMs
+                                );
+                            }
+                        }
                     }
                     if (port != FileLockContentionHandler.INVALID_PORT) { //we don't like the assumption about the port very much
                         LockInfo lockInfo = readInformationRegion(backoff);

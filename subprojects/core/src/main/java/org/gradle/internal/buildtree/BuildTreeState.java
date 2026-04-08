@@ -17,6 +17,7 @@
 package org.gradle.internal.buildtree;
 
 import org.gradle.internal.concurrent.CompositeStoppable;
+import org.gradle.internal.concurrent.ConcurrentBuildInvocationContext;
 import org.gradle.internal.scopeids.id.BuildInvocationScopeId;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.service.ServiceRegistryBuilder;
@@ -38,12 +39,20 @@ public class BuildTreeState implements Closeable {
         BuildModelParameters buildModelParameters,
         BuildInvocationScopeId buildInvocationScopeId
     ) {
-        services = ServiceRegistryBuilder.builder()
-            .scopeStrictly(Scope.BuildTree.class)
-            .displayName("build tree services")
-            .parent(buildSessionServices)
-            .provider(new BuildTreeScopeServices(buildActionRequirements, buildModelParameters, buildInvocationScopeId, this))
-            .build();
+        ConcurrentBuildInvocationContext.enter(buildModelParameters.isConcurrentInvocationsEnabled());
+        final ServiceRegistry registry;
+        try {
+            registry = ServiceRegistryBuilder.builder()
+                .scopeStrictly(Scope.BuildTree.class)
+                .displayName("build tree services")
+                .parent(buildSessionServices)
+                .provider(new BuildTreeScopeServices(buildActionRequirements, buildModelParameters, buildInvocationScopeId, this))
+                .build();
+        } catch (Throwable t) {
+            ConcurrentBuildInvocationContext.leave();
+            throw t;
+        }
+        this.services = registry;
     }
 
     public ServiceRegistry getServices() {
@@ -52,6 +61,10 @@ public class BuildTreeState implements Closeable {
 
     @Override
     public void close() {
-        CompositeStoppable.stoppable(services).stop();
+        try {
+            CompositeStoppable.stoppable(services).stop();
+        } finally {
+            ConcurrentBuildInvocationContext.leave();
+        }
     }
 }

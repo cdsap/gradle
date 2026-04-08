@@ -18,6 +18,7 @@ dependencies {
     api(libs.jspecify)
 
     implementation(projects.io)
+    implementation(projects.loggingApi)
     implementation(projects.time)
 
     implementation(libs.fastutil)
