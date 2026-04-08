@@ -1,24 +1,21 @@
-# Phase 7 (planned): Multi-process validation and product docs
+# Phase 7: Multi-process validation and product docs
 
-Phase 6 introduced **automated coverage** for the concurrent file-lock build operation path (see `phase6.md`). Phase 7 is the next increment: **real multi-process** scenarios and **user-facing** documentation.
+Phase 6 introduced automated coverage for the concurrent file-lock build operation path (see `phase6.md`). Phase 7 tracks **multi-process** scenarios, **shared-store** work, **user-facing documentation**, and optional **daemon** experiments.
 
-## 1. Multi-process integration tests
+## Status
 
-- Two JVMs / two `GradleExecuter` instances (or scripted shells) sharing a temporary `GRADLE_USER_HOME`.
-- Enable `--concurrent` (and any required CC flags) so lock diagnostics and operations fire.
-- Assertions: both builds succeed; no corrupt cache markers; optional listener asserts an `Acquire file lock on` operation under forced contention.
+### Done
 
-## 2. Shared store (continued)
+- **User documentation (§3)** — Published in the user manual:
+  - Performance options: `--concurrent` / `--no-concurrent` (`platforms/documentation/docs/src/docs/userguide/reference/runtime-configuration/command_line_interface.adoc`, anchor `sec:command_line_concurrent_invocations`).
+  - Gradle properties reference: `org.gradle.concurrent`, `org.gradle.internal.concurrent.lock-diagnostics` (`build_environment.adoc`).
+  - Dependency cache locking section cross-links to that CLI topic (`dependency_caching.adoc`).
+  - Describes build-scan visibility (operations named like `Acquire file lock on ...` and contention in the structured result).
 
-- Execute the “one store” experiment from the agentic spec: targeted RW or staging under `org.gradle.concurrent` + an internal kill-switch.
+### Still open
 
-## 3. User documentation
+1. **Multi-process integration tests** — Two JVMs / executors sharing a temporary `GRADLE_USER_HOME`, `--concurrent`; success + cache integrity; optional build-operation assertions under forced contention (see `phase8.md`).
+2. **Shared store experiment** — Targeted RW or staging under `org.gradle.concurrent` + internal guard (spec-aligned).
+3. **Daemon experiments** — Only after multi-process metrics: pooling or scheduling hypotheses.
 
-- Publish a short section (e.g. user manual or release notes) describing:
-  - `org.gradle.concurrent` / `--concurrent`
-  - `org.gradle.internal.concurrent.lock-diagnostics`
-  - How lock wait appears in console and in **build scans** (operation display name + result type)
-
-## 4. Daemon experiments (optional)
-
-- Only after Phase 7 §1 metrics: revisit daemon pooling or scheduling hypotheses.
+Next increment: **`phase8.md`**.

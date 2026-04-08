@@ -14,7 +14,7 @@
 
 [[command_line_interface]]
 = Command-Line Interface
-:keywords: cli, clean, check, projects, tasks, rerun-tasks, continue, build-cache, no-build-cache, configuration-cache, no-configuration-cache, configuration-cache-problems, configure-on-demand, no-configure-on-demand, max-workers, parallel, no-parallel, priority, profile, scan, watch-fs, no-watch-fs, help, version, show-version, full-stacktrace, stacktrace, org.gradle.debug, org.gradle.debug.host, org.gradle.debug.port, org.gradle.debug.server, org.gradle.debug.suspend, project-cache-dir, system-prop, init-script, project-prop, org.gradle.jvmargs, org.gradle.java.home, gradle-user-home, dependency-verification, write-verification-metadata, refresh-keys, export-keys, include-build, offline, refresh-dependencies, dry-run, continuous, write-locks, update-locks , no-rebuild, org.gradle.warning.mode, warning-mode, no-problems-report, problems-report, org.gradle.console, console, org.gradle.logging.level, quiet, warn, info, debug, daemon, no-daemon, foreground, status, stop, org.gradle.daemon.idletimeout, exclude-task, distribution-type, gradle-distribution-url, gradle-distribution-sha256-sum, gradle-version
+:keywords: cli, clean, check, projects, tasks, rerun-tasks, continue, build-cache, no-build-cache, configuration-cache, no-configuration-cache, configuration-cache-problems, configure-on-demand, no-configure-on-demand, max-workers, parallel, no-parallel, concurrent, no-concurrent, org.gradle.concurrent, priority, profile, scan, watch-fs, no-watch-fs, help, version, show-version, full-stacktrace, stacktrace, org.gradle.debug, org.gradle.debug.host, org.gradle.debug.port, org.gradle.debug.server, org.gradle.debug.suspend, project-cache-dir, system-prop, init-script, project-prop, org.gradle.jvmargs, org.gradle.java.home, gradle-user-home, dependency-verification, write-verification-metadata, refresh-keys, export-keys, include-build, offline, refresh-dependencies, dry-run, continuous, write-locks, update-locks , no-rebuild, org.gradle.warning.mode, warning-mode, no-problems-report, problems-report, org.gradle.console, console, org.gradle.logging.level, quiet, warn, info, debug, daemon, no-daemon, foreground, status, stop, org.gradle.daemon.idletimeout, exclude-task, distribution-type, gradle-distribution-url, gradle-distribution-sha256-sum, gradle-version
 
 The command-line interface is the **primary method of interacting with Gradle**.
 
@@ -621,6 +621,18 @@ Sets the maximum number of workers that Gradle may use. _Default is number of pr
 
 `--parallel`, `--no-parallel`::
 Build projects in parallel. For limitations of this option, see <<performance.adoc#sec:enable_parallel_execution, Parallel Project Execution>>. _Default is off_.
+
+[[sec:command_line_concurrent_invocations]]
+`--concurrent`, `--no-concurrent` incubating-label:[]::
+Opt in to behavior tuned for <<dependency_caching.adoc#sec:cache-locking,several Gradle processes>> sharing the same <<directory_layout.adoc#dir:gradle_user_home,Gradle user home>> (for example agent-driven or scripted parallel invocations).
+This option does not replace normal project/task parallelism; it is orthogonal to `--parallel`.
++
+The same flag is available as the <<build_environment.adoc#sec:gradle_configuration_properties,Gradle property>> `org.gradle.concurrent`. _Default is off_.
++
+When concurrent invocations are enabled, Gradle may emit additional lifecycle messages while waiting on shared <<dependency_caching.adoc#sec:cache-locking,user home>> file locks.
+You can disable those messages with the internal property `org.gradle.internal.concurrent.lock-diagnostics=false` (unsupported; for advanced troubleshooting only).
++
+link:https://scans.gradle.com/[Build scans] may list operations named like pass:[`Acquire file lock on ...`] with structured details for lock targets; the operation result can indicate whether lock acquisition observed contention.
 
 `--priority`::
 Specifies the scheduling priority for the Gradle daemon and all processes launched by it. Values are `normal` or `low`. _Default is normal_.

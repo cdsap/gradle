@@ -99,6 +99,8 @@ The lock is held whenever the binary metadata store is being read or written, bu
 
 This concurrent access is only supported if the different Gradle processes can communicate together. This is usually _not the case_ for containerized builds.
 
+If you intentionally run many Gradle clients against the same user home (for example from automation), consider the incubating <<command_line_interface.adoc#sec:command_line_concurrent_invocations,`--concurrent`>> option and related <<build_environment.adoc#sec:gradle_configuration_properties,Gradle properties>>.
+
 [[sec:cache-cleanup]]
 === Cache cleanup
 

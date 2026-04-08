@@ -370,6 +370,17 @@ Enables <<configuration_cache_enabling.adoc#config_cache:usage:enable, configura
 +
 _Default is `false`._
 
+`org.gradle.concurrent=(true,false)` incubating-label:[]::
+Same effect as <<command_line_interface.adoc#sec:command_line_concurrent_invocations,`--concurrent` / `--no-concurrent`>>: opt in to behavior intended when multiple Gradle invocations share a Gradle user home.
++
+_Default is `false`._
+
+`org.gradle.internal.concurrent.lock-diagnostics=(true,false)`::
+Internal, unsupported property.
+When `false`, suppresses extra lifecycle logging while waiting on shared Gradle user home file locks under <<command_line_interface.adoc#sec:command_line_concurrent_invocations,concurrent invocations>>.
++
+_Default is `true`._
+
 `org.gradle.configureondemand=(true,false)`::
 Enables incubating configuration-on-demand, where Gradle will attempt to configure only necessary projects.
 +
