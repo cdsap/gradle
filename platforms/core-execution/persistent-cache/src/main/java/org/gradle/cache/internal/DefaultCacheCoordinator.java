@@ -123,7 +123,7 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
                 break;
             case None:
                 crossProcessCacheAccess = new NoLockingCacheAccess(this::notifyFinish);
-                fileAccess = TransparentFileAccess.INSTANCE;
+                fileAccess = new TransparentFileAccess();
                 break;
             default:
                 throw new IllegalArgumentException();
@@ -490,31 +490,30 @@ public class DefaultCacheCoordinator implements CacheCreationCoordinator, Exclus
         return fileLock;
     }
 
-    private static class TransparentFileAccess implements FileAccess {
-        private static final FileAccess INSTANCE = new TransparentFileAccess();
+    private class TransparentFileAccess implements FileAccess {
+        @Override
+        public <T> T readFileShared(Supplier<? extends T> action) throws LockTimeoutException, FileIntegrityViolationException, InsufficientLockModeException {
+            return DefaultCacheCoordinator.this.readFileShared(action);
+        }
 
         @Override
         public <T> T readFile(Callable<? extends T> action) throws LockTimeoutException, FileIntegrityViolationException, InsufficientLockModeException {
-            try {
-                return action.call();
-            } catch (Exception e) {
-                throw UncheckedException.throwAsUncheckedException(e);
-            }
+            return DefaultCacheCoordinator.this.readFile(action);
         }
 
         @Override
         public <T> T readFile(Supplier<? extends T> action) throws LockTimeoutException, FileIntegrityViolationException, InsufficientLockModeException {
-            return action.get();
+            return DefaultCacheCoordinator.this.readFile(action);
         }
 
         @Override
         public void updateFile(Runnable action) throws LockTimeoutException, FileIntegrityViolationException, InsufficientLockModeException {
-            action.run();
+            DefaultCacheCoordinator.this.updateFile(action);
         }
 
         @Override
         public void writeFile(Runnable action) throws LockTimeoutException, InsufficientLockModeException {
-            action.run();
+            DefaultCacheCoordinator.this.writeFile(action);
         }
     }
 

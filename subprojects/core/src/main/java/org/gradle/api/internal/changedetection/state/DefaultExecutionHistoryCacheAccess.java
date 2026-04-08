@@ -17,6 +17,7 @@ package org.gradle.api.internal.changedetection.state;
 
 import org.gradle.cache.FileLockManager;
 import org.gradle.cache.PersistentCache;
+import org.gradle.cache.internal.ConcurrencyMode;
 import org.gradle.cache.scopes.ScopedCacheBuilderFactory;
 import org.gradle.internal.execution.history.ExecutionHistoryCacheAccess;
 
@@ -26,10 +27,11 @@ public class DefaultExecutionHistoryCacheAccess implements ExecutionHistoryCache
     private final PersistentCache cache;
 
     public DefaultExecutionHistoryCacheAccess(ScopedCacheBuilderFactory cacheBuilderFactory) {
+        FileLockManager.LockMode initialLockMode = ConcurrencyMode.isAgentic() ? FileLockManager.LockMode.Shared : FileLockManager.LockMode.OnDemand;
         this.cache = cacheBuilderFactory
             .createCacheBuilder("executionHistory")
             .withDisplayName("execution history cache")
-            .withInitialLockMode(FileLockManager.LockMode.OnDemand)
+            .withInitialLockMode(initialLockMode)
             .open();
     }
 

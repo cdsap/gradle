@@ -21,6 +21,7 @@ import org.gradle.api.internal.changedetection.state.DefaultExecutionHistoryCach
 import org.gradle.api.problems.internal.InternalProblems;
 import org.gradle.cache.FileLockManager;
 import org.gradle.cache.PersistentCache;
+import org.gradle.cache.internal.ConcurrencyMode;
 import org.gradle.cache.internal.InMemoryCacheDecoratorFactory;
 import org.gradle.cache.scopes.BuildScopedCacheBuilderFactory;
 import org.gradle.caching.internal.controller.BuildCacheController;
@@ -119,14 +120,16 @@ public class ExecutionBuildServices implements ServiceRegistrationProvider {
 
     @Provides
     OutputFilesRepository createOutputFilesRepository(BuildScopedCacheBuilderFactory cacheBuilderFactory, InMemoryCacheDecoratorFactory inMemoryCacheDecoratorFactory) {
+        FileLockManager.LockMode initialLockMode = ConcurrencyMode.isAgentic() ? FileLockManager.LockMode.Shared : FileLockManager.LockMode.OnDemand;
         PersistentCache cacheAccess = cacheBuilderFactory
             .createCrossVersionCacheBuilder("buildOutputCleanup")
             .withDisplayName("Build Output Cleanup Cache")
-            .withInitialLockMode(FileLockManager.LockMode.OnDemand)
+            .withInitialLockMode(initialLockMode)
             .withProperties(Collections.singletonMap("gradle.version", GradleVersion.current().getVersion()))
             .open();
         return new DefaultOutputFilesRepository(cacheAccess, inMemoryCacheDecoratorFactory);
     }
+
 
     @Provides
     OutputChangeListener createOutputChangeListener(ListenerManager listenerManager) {

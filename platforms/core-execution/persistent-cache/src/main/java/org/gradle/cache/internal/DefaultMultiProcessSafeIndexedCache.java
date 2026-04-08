@@ -43,7 +43,7 @@ public class DefaultMultiProcessSafeIndexedCache<K, V> implements MultiProcessSa
     public V getIfPresent(final K key) {
         final BTreePersistentIndexedCache<K, V> cache = getCache();
         try {
-            return fileAccess.readFile((Supplier<V>) () -> cache.get(key));
+            return fileAccess.readFileShared((Supplier<V>) () -> cache.get(key));
         } catch (FileIntegrityViolationException e) {
             return null;
         }

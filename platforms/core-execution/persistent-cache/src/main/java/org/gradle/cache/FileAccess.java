@@ -23,6 +23,13 @@ import java.util.function.Supplier;
  */
 public interface FileAccess {
     /**
+     * Runs the given action under a shared lock on the target file.
+     *
+     * @since 8.12
+     */
+    <T> T readFileShared(Supplier<? extends T> action) throws LockTimeoutException, FileIntegrityViolationException, InsufficientLockModeException;
+
+    /**
      * Runs the given action under a shared or exclusive lock on the target file.
      *
      * @throws LockTimeoutException On timeout acquiring lock, if required.
