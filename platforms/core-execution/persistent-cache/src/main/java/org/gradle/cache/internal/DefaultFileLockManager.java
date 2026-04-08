@@ -67,6 +67,13 @@ import static org.gradle.internal.UncheckedException.throwAsUncheckedException;
 public class DefaultFileLockManager implements FileLockManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultFileLockManager.class);
     private static final org.gradle.api.logging.Logger GRADLE_LOG = Logging.getLogger(DefaultFileLockManager.class);
+
+    /**
+     * When {@code false}, suppresses concurrent-invocation lifecycle lock-wait messages (see Phase 2 / phase2.md).
+     * Default is {@code true}. Intended for tests and environments where logs must stay quiet.
+     */
+    public static final String CONCURRENT_LOCK_DIAGNOSTICS_PROPERTY = "org.gradle.internal.concurrent.lock-diagnostics";
+
     public static final int DEFAULT_LOCK_TIMEOUT = 60000;
 
     private final Set<File> lockedFiles = new CopyOnWriteArraySet<>();
@@ -490,7 +497,7 @@ public class DefaultFileLockManager implements FileLockManager {
                     if (lockOutcome.isLockWasAcquired()) {
                         return ExponentialBackoff.Result.successful(lockOutcome);
                     }
-                    if (ConcurrentBuildInvocationContext.isEnabled()) {
+                    if (ConcurrentBuildInvocationContext.isEnabled() && concurrentLockDiagnosticsEnabled()) {
                         long elapsedMs = backoff.getTimer().getElapsedMillis();
                         if (elapsedMs >= CONCURRENT_DIAGNOSTIC_FIRST_MS) {
                             if (lastContentionDiagnosticMs < 0) {
@@ -543,6 +550,11 @@ public class DefaultFileLockManager implements FileLockManager {
                 }
             });
         }
+    }
+
+    @VisibleForTesting
+    static boolean concurrentLockDiagnosticsEnabled() {
+        return Boolean.parseBoolean(System.getProperty(CONCURRENT_LOCK_DIAGNOSTICS_PROPERTY, "true"));
     }
 
     private boolean isSupportedMode(LockMode requestedLockMode) {
