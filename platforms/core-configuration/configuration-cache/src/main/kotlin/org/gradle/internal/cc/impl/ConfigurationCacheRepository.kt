@@ -17,6 +17,8 @@
 package org.gradle.internal.cc.impl
 
 import com.google.common.annotations.VisibleForTesting
+import org.gradle.api.logging.Logger
+import org.gradle.api.logging.Logging
 import org.gradle.api.internal.BuildDefinition
 import org.gradle.api.internal.cache.CacheConfigurationsInternal
 import org.gradle.cache.CacheBuilder
@@ -25,6 +27,7 @@ import org.gradle.cache.CleanupAction
 import org.gradle.cache.CleanupProgressMonitor
 import org.gradle.cache.FileLock
 import org.gradle.cache.FileLockManager
+import org.gradle.cache.LockTimeoutException
 import org.gradle.cache.internal.FilesFinder
 import org.gradle.cache.internal.LeastRecentlyUsedCacheCleanup
 import org.gradle.cache.internal.SingleDepthFilesFinder
@@ -51,7 +54,9 @@ import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.Collections
+import java.util.Locale
 import java.util.function.Supplier
+import java.util.concurrent.TimeUnit
 
 
 @ServiceScope(Scope.BuildSession::class)
@@ -64,6 +69,12 @@ class ConfigurationCacheRepository(
     private val fileLockManager: FileLockManager,
     modelParameters: BuildModelParameters
 ) : Stoppable {
+    companion object {
+        private const val LOCK_WAIT_LOG_THRESHOLD_MILLIS = 200L
+        private const val LOCK_REASON_PREFIX = "concurrency-limited:lock-contention:configuration-cache"
+        private val LOGGER: Logger = Logging.getLogger(ConfigurationCacheRepository::class.java)
+    }
+
     private
     val concurrentInvocationModeEnabled = modelParameters.isConcurrentInvocationModeEnabled
 
@@ -349,11 +360,27 @@ class ConfigurationCacheRepository(
     private
     fun <T> withConcurrentInvocationLock(lockMode: FileLockManager.LockMode, action: (FileLock) -> T): T {
         val lockTarget = cache.baseDir.resolve(".concurrent-invocation-access")
-        val lock = fileLockManager.lock(
-            lockTarget,
-            DefaultLockOptions.mode(lockMode),
-            "configuration cache concurrent invocation lock"
-        )
+        val lockAcquireStart = System.nanoTime()
+        val lock = try {
+            fileLockManager.lock(
+                lockTarget,
+                DefaultLockOptions.mode(lockMode),
+                "configuration cache concurrent invocation lock"
+            )
+        } catch (e: LockTimeoutException) {
+            throw LockTimeoutException(
+                "$LOCK_REASON_PREFIX:${lockMode.name.lowercase(Locale.US)}:${e.message}",
+                e.lockFile
+            )
+        }
+        val lockAcquireDurationMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lockAcquireStart)
+        if (lockAcquireDurationMillis >= LOCK_WAIT_LOG_THRESHOLD_MILLIS) {
+            LOGGER.lifecycle(
+                "Concurrency is currently limited by lock contention: configuration cache {} lock waited {}ms.",
+                lockMode.name.lowercase(Locale.US),
+                lockAcquireDurationMillis
+            )
+        }
         return try {
             action(lock)
         } finally {

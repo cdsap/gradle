@@ -229,6 +229,7 @@ class DaemonClientTest extends ConcurrentSpecification {
         0 * connection3.stop()
         def exception = thrown(NoUsableDaemonFoundException)
         exception.message.contains 'A new daemon was started but could not be connected to. This is unexpected.'
+        exception.message.contains 'concurrency-limited categories while connecting: total=2, daemon-availability x2'
         exception.message.contains 'concurrency-limited reasons while connecting: concurrency-limited:daemon-availability:already building x2'
         exception.resolutions[0].contains new DocumentationRegistry().getDocumentationRecommendationFor("information", "troubleshooting", "network_connection")
         exception.causes.size() == 2

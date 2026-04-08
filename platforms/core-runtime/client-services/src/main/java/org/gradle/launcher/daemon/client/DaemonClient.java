@@ -59,6 +59,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -99,6 +101,7 @@ import java.util.stream.Collectors;
  */
 public class DaemonClient implements BuildActionExecutor<BuildActionParameters, ClientBuildRequestContext> {
     private static final Logger LOGGER = Logging.getLogger(DaemonClient.class);
+    private static final Pattern CONCURRENCY_LIMIT_REASON_PATTERN = Pattern.compile("^concurrency-limited:([^:]+):(.+)$");
     private final DaemonConnector connector;
     private final OutputEventListener outputEventListener;
     private final ExplainingSpec<DaemonContext> compatibilitySpec;
@@ -175,7 +178,8 @@ public class DaemonClient implements BuildActionExecutor<BuildActionParameters, 
 
         if (!daemonUnavailableReasons.isEmpty()) {
             LOGGER.lifecycle(
-                "Concurrency is currently limited while connecting to daemons: {}. Trying to start a new daemon.",
+                "Concurrency is currently limited while connecting to daemons: {} (reasons: {}). Trying to start a new daemon.",
+                formatDaemonUnavailableReasonCategories(daemonUnavailableReasons),
                 formatDaemonUnavailableReasons(daemonUnavailableReasons)
             );
         }
@@ -197,17 +201,6 @@ public class DaemonClient implements BuildActionExecutor<BuildActionParameters, 
         }
     }
 
-    private static String noUsableDaemonMessage(DaemonClientConnection connection, List<DaemonInitialConnectException> accumulatedExceptions) {
-        StringBuilder message = new StringBuilder("A new daemon was started but could not be connected to. This is unexpected.\n")
-            .append("diagnostics: ").append(connection.getDaemon());
-        Map<String, Integer> daemonUnavailableReasons = collectDaemonUnavailableReasons(accumulatedExceptions);
-        if (!daemonUnavailableReasons.isEmpty()) {
-            message.append("\nconcurrency-limited reasons while connecting: ")
-                .append(formatDaemonUnavailableReasons(daemonUnavailableReasons));
-        }
-        return message.toString();
-    }
-
     private static Map<String, Integer> collectDaemonUnavailableReasons(List<DaemonInitialConnectException> accumulatedExceptions) {
         Map<String, Integer> reasons = new LinkedHashMap<>();
         for (DaemonInitialConnectException exception : accumulatedExceptions) {
@@ -219,10 +212,45 @@ public class DaemonClient implements BuildActionExecutor<BuildActionParameters, 
         return reasons;
     }
 
+    private static String formatDaemonUnavailableReasonCategories(Map<String, Integer> reasons) {
+        Map<String, Integer> categories = new LinkedHashMap<>();
+        int total = 0;
+        for (Map.Entry<String, Integer> reason : reasons.entrySet()) {
+            String category = reasonCategory(reason.getKey());
+            int count = reason.getValue();
+            total += count;
+            categories.merge(category, count, Integer::sum);
+        }
+        return "total=" + total + ", " + categories.entrySet().stream()
+            .map(entry -> entry.getKey() + " x" + entry.getValue())
+            .collect(Collectors.joining(", "));
+    }
+
+    private static String reasonCategory(String reason) {
+        Matcher matcher = CONCURRENCY_LIMIT_REASON_PATTERN.matcher(reason);
+        if (matcher.matches()) {
+            return matcher.group(1);
+        }
+        return "unknown";
+    }
+
     private static String formatDaemonUnavailableReasons(Map<String, Integer> reasons) {
         return reasons.entrySet().stream()
             .map(entry -> entry.getKey() + " x" + entry.getValue())
             .collect(Collectors.joining(", "));
+    }
+
+    private static String noUsableDaemonMessage(DaemonClientConnection connection, List<DaemonInitialConnectException> accumulatedExceptions) {
+        StringBuilder message = new StringBuilder("A new daemon was started but could not be connected to. This is unexpected.\n")
+            .append("diagnostics: ").append(connection.getDaemon());
+        Map<String, Integer> daemonUnavailableReasons = collectDaemonUnavailableReasons(accumulatedExceptions);
+        if (!daemonUnavailableReasons.isEmpty()) {
+            message.append("\nconcurrency-limited categories while connecting: ")
+                .append(formatDaemonUnavailableReasonCategories(daemonUnavailableReasons));
+            message.append("\nconcurrency-limited reasons while connecting: ")
+                .append(formatDaemonUnavailableReasons(daemonUnavailableReasons));
+        }
+        return message.toString();
     }
 
     protected BuildActionResult executeBuild(Build build, DaemonClientConnection connection, BuildCancellationToken cancellationToken, BuildEventConsumer buildEventConsumer) throws DaemonInitialConnectException {
