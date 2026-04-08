@@ -22,6 +22,7 @@ plugins {
 description = "Tools to work with managed executors"
 
 dependencies {
+    api(projects.buildOperations)
     api(projects.stdlibJavaExtensions)
 
     api(libs.jspecify)

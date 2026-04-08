@@ -10,39 +10,55 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language and limitations under the License.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.gradle.internal.concurrent;
+
+import org.gradle.internal.operations.BuildOperationRunner;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 
 /**
- * Per-thread stack of "concurrent invocations" opt-in flags, scoped to build tree entry/exit.
+ * Per-thread stack of concurrent-invocation scopes, created for each {@code BuildTreeState}.
  * <p>
  * File locking and other cross-invocation mechanisms consult this to emit extra diagnostics
  * without reading start parameters from low-level infrastructure.
  */
 public final class ConcurrentBuildInvocationContext {
 
-    private static final ThreadLocal<Deque<Boolean>> STACK = ThreadLocal.withInitial(ArrayDeque::new);
+    private static final class Frame {
+        private final boolean concurrentInvocationsEnabled;
+        private final @Nullable BuildOperationRunner buildOperationRunner;
+
+        private Frame(boolean concurrentInvocationsEnabled, @Nullable BuildOperationRunner buildOperationRunner) {
+            this.concurrentInvocationsEnabled = concurrentInvocationsEnabled;
+            this.buildOperationRunner = buildOperationRunner;
+        }
+    }
+
+    private static final ThreadLocal<Deque<Frame>> STACK = ThreadLocal.withInitial(ArrayDeque::new);
 
     private ConcurrentBuildInvocationContext() {
     }
 
     /**
-     * Pushes the effective flag for a nested build tree scope. Call {@link #leave()} when the tree is closed.
+     * Pushes a build-tree scope. Call {@link #leave()} when the tree is closed.
+     *
+     * @param buildOperationRunner may be null when global services omit it (for example some CLI bootstrap paths)
      */
-    public static void enter(boolean concurrentInvocationsEnabled) {
-        STACK.get().push(concurrentInvocationsEnabled);
+    public static void enter(boolean concurrentInvocationsEnabled, @Nullable BuildOperationRunner buildOperationRunner) {
+        STACK.get().push(new Frame(concurrentInvocationsEnabled, buildOperationRunner));
     }
 
     /**
-     * Pops the innermost scope. Must balance each {@link #enter(boolean)}.
+     * Pops the innermost scope. Must balance each {@link #enter(boolean, BuildOperationRunner)}.
      */
     public static void leave() {
-        Deque<Boolean> deque = STACK.get();
+        Deque<Frame> deque = STACK.get();
         if (deque.isEmpty()) {
             throw new IllegalStateException("ConcurrentBuildInvocationContext underflow");
         }
@@ -56,7 +72,16 @@ public final class ConcurrentBuildInvocationContext {
      * True when the current thread is inside a build tree that opted into concurrent invocations.
      */
     public static boolean isEnabled() {
-        Deque<Boolean> deque = STACK.get();
-        return !deque.isEmpty() && Boolean.TRUE.equals(deque.peek());
+        Deque<Frame> deque = STACK.get();
+        return !deque.isEmpty() && deque.peek().concurrentInvocationsEnabled;
+    }
+
+    /**
+     * Build operation runner for the current build tree, when registered.
+     */
+    @Nullable
+    public static BuildOperationRunner currentBuildOperationRunner() {
+        Deque<Frame> deque = STACK.get();
+        return deque.isEmpty() ? null : deque.peek().buildOperationRunner;
     }
 }

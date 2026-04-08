@@ -33,10 +33,16 @@ import org.gradle.cache.internal.filelock.LockStateSerializer;
 import org.gradle.cache.internal.filelock.Version1LockStateSerializer;
 import org.gradle.api.logging.Logging;
 import org.gradle.cache.internal.locklistener.FileLockContentionHandler;
+import org.gradle.cache.internal.operations.AcquireGradleUserHomeFileLockDetails;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.concurrent.CompositeStoppable;
 import org.gradle.internal.concurrent.ConcurrentBuildInvocationContext;
 import org.gradle.internal.concurrent.Stoppable;
+import org.gradle.internal.operations.BuildOperationContext;
+import org.gradle.internal.operations.BuildOperationDescriptor;
+import org.gradle.internal.operations.BuildOperationInvocationException;
+import org.gradle.internal.operations.BuildOperationRunner;
+import org.gradle.internal.operations.CallableBuildOperation;
 import org.gradle.internal.os.OperatingSystem;
 import org.gradle.internal.time.ExponentialBackoff;
 import org.jspecify.annotations.Nullable;
@@ -482,8 +488,49 @@ public class DefaultFileLockManager implements FileLockManager {
          * (see {@link FileLockContentionHandler#maybePingOwner(int, long, String, long, FileLockReleasedSignal)} how ping algorithm is done).
          * We then repeat the process with exponential backoff, till we finally acquire the lock or timeout (by default in {@link DefaultFileLockManager#DEFAULT_LOCK_TIMEOUT}).
          */
-        private FileLockOutcome lockStateRegion(final LockMode lockMode) throws IOException, InterruptedException {
+        private FileLockOutcome lockStateRegion(final LockMode lockMode) throws Throwable {
             final ExponentialBackoff<AwaitableFileLockReleasedSignal> backoff = newExponentialBackoff(lockTimeoutMs);
+            boolean wantDiagnostics = ConcurrentBuildInvocationContext.isEnabled() && concurrentLockDiagnosticsEnabled();
+            if (wantDiagnostics) {
+                BuildOperationRunner runner = ConcurrentBuildInvocationContext.currentBuildOperationRunner();
+                if (runner != null) {
+                    try {
+                        return runner.call(new CallableBuildOperation<FileLockOutcome>() {
+                            @Override
+                            public BuildOperationDescriptor.Builder description() {
+                                return BuildOperationDescriptor.displayName("Acquire file lock on '" + displayName + "'")
+                                    .details(new AcquireGradleUserHomeFileLockDetails(
+                                        displayName,
+                                        lockMode.name(),
+                                        lockFile.getAbsolutePath(),
+                                        operationDisplayName.isEmpty() ? null : operationDisplayName
+                                    ))
+                                    .progressDisplayName("Acquiring file lock");
+                            }
+
+                            @Override
+                            public FileLockOutcome call(BuildOperationContext context) throws Exception {
+                                return executeLockStateRegionBackoff(backoff, lockMode, context::progress);
+                            }
+                        });
+                    } catch (BuildOperationInvocationException e) {
+                        Throwable cause = e.getCause();
+                        if (cause != null) {
+                            throw cause;
+                        }
+                        throw e;
+                    }
+                }
+                return executeLockStateRegionBackoff(backoff, lockMode, GRADLE_LOG::lifecycle);
+            }
+            return executeLockStateRegionBackoff(backoff, lockMode, null);
+        }
+
+        private FileLockOutcome executeLockStateRegionBackoff(
+            final ExponentialBackoff<AwaitableFileLockReleasedSignal> backoff,
+            final LockMode lockMode,
+            final @Nullable Consumer<String> contentionProgress
+        ) throws IOException, InterruptedException {
             return backoff.retryUntil(new ExponentialBackoff.Query<FileLockOutcome>() {
                 private static final long CONCURRENT_DIAGNOSTIC_FIRST_MS = 1000;
                 private static final long CONCURRENT_DIAGNOSTIC_INTERVAL_MS = 5000;
@@ -497,25 +544,27 @@ public class DefaultFileLockManager implements FileLockManager {
                     if (lockOutcome.isLockWasAcquired()) {
                         return ExponentialBackoff.Result.successful(lockOutcome);
                     }
-                    if (ConcurrentBuildInvocationContext.isEnabled() && concurrentLockDiagnosticsEnabled()) {
+                    if (contentionProgress != null) {
                         long elapsedMs = backoff.getTimer().getElapsedMillis();
                         if (elapsedMs >= CONCURRENT_DIAGNOSTIC_FIRST_MS) {
                             if (lastContentionDiagnosticMs < 0) {
                                 lastContentionDiagnosticMs = elapsedMs;
                                 String op = operationDisplayName.isEmpty() ? "" : " for " + operationDisplayName;
-                                GRADLE_LOG.lifecycle(
-                                    "Concurrent invocations: waiting for {} lock on '{}' ({} ms). Another process may hold the shared Gradle user home.",
+                                contentionProgress.accept(String.format(
+                                    Locale.ROOT,
+                                    "Concurrent invocations: waiting for %s lock on '%s' (%d ms). Another process may hold the shared Gradle user home.",
                                     lockMode.toString().toLowerCase(Locale.ROOT) + op,
                                     displayName,
                                     elapsedMs
-                                );
+                                ));
                             } else if (elapsedMs - lastContentionDiagnosticMs >= CONCURRENT_DIAGNOSTIC_INTERVAL_MS) {
                                 lastContentionDiagnosticMs = elapsedMs;
-                                GRADLE_LOG.lifecycle(
-                                    "Concurrent invocations: still waiting for file lock on '{}' ({} ms).",
+                                contentionProgress.accept(String.format(
+                                    Locale.ROOT,
+                                    "Concurrent invocations: still waiting for file lock on '%s' (%d ms).",
                                     displayName,
                                     elapsedMs
-                                );
+                                ));
                             }
                         }
                     }

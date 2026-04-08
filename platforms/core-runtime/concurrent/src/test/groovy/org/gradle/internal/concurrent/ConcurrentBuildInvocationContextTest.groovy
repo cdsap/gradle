@@ -27,7 +27,7 @@ class ConcurrentBuildInvocationContextTest extends Specification {
 
     def "enter and leave enable and disable"() {
         when:
-        ConcurrentBuildInvocationContext.enter(false)
+        ConcurrentBuildInvocationContext.enter(false, null)
         then:
         !ConcurrentBuildInvocationContext.isEnabled()
 
@@ -39,7 +39,7 @@ class ConcurrentBuildInvocationContextTest extends Specification {
 
     def "enter true enables until leave"() {
         when:
-        ConcurrentBuildInvocationContext.enter(true)
+        ConcurrentBuildInvocationContext.enter(true, null)
         then:
         ConcurrentBuildInvocationContext.isEnabled()
 
@@ -51,8 +51,8 @@ class ConcurrentBuildInvocationContextTest extends Specification {
 
     def "nested scopes use innermost flag"() {
         given:
-        ConcurrentBuildInvocationContext.enter(true)
-        ConcurrentBuildInvocationContext.enter(false)
+        ConcurrentBuildInvocationContext.enter(true, null)
+        ConcurrentBuildInvocationContext.enter(false, null)
 
         expect:
         !ConcurrentBuildInvocationContext.isEnabled()

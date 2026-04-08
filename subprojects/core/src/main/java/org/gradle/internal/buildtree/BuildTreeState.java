@@ -18,8 +18,10 @@ package org.gradle.internal.buildtree;
 
 import org.gradle.internal.concurrent.CompositeStoppable;
 import org.gradle.internal.concurrent.ConcurrentBuildInvocationContext;
+import org.gradle.internal.operations.BuildOperationRunner;
 import org.gradle.internal.scopeids.id.BuildInvocationScopeId;
 import org.gradle.internal.service.ServiceRegistry;
+import org.jspecify.annotations.Nullable;
 import org.gradle.internal.service.ServiceRegistryBuilder;
 import org.gradle.internal.service.scopes.Scope;
 import org.gradle.internal.service.scopes.ServiceScope;
@@ -39,7 +41,10 @@ public class BuildTreeState implements Closeable {
         BuildModelParameters buildModelParameters,
         BuildInvocationScopeId buildInvocationScopeId
     ) {
-        ConcurrentBuildInvocationContext.enter(buildModelParameters.isConcurrentInvocationsEnabled());
+        ConcurrentBuildInvocationContext.enter(
+            buildModelParameters.isConcurrentInvocationsEnabled(),
+            findBuildOperationRunner(buildSessionServices)
+        );
         final ServiceRegistry registry;
         try {
             registry = ServiceRegistryBuilder.builder()
@@ -53,6 +58,14 @@ public class BuildTreeState implements Closeable {
             throw t;
         }
         this.services = registry;
+    }
+
+    private static @Nullable BuildOperationRunner findBuildOperationRunner(ServiceRegistry buildSessionServices) {
+        Object found = buildSessionServices.find(BuildOperationRunner.class);
+        if (found instanceof BuildOperationRunner) {
+            return (BuildOperationRunner) found;
+        }
+        return null;
     }
 
     public ServiceRegistry getServices() {
