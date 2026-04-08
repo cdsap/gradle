@@ -16,6 +16,7 @@
 
 package org.gradle.caching.local.internal
 
+import org.gradle.cache.LockTimeoutException
 import org.gradle.cache.PersistentCache
 import org.gradle.internal.file.FileAccessTracker
 import org.gradle.internal.hash.TestHashCodes
@@ -135,5 +136,19 @@ class DirectoryBuildCacheTest extends Specification {
         // Note that we don't know which variant of the file ended up in the cache,
         // as `Files.move()` and `File.renameTo()` can either fail or replace the
         // already existing file; it's up to the implementation.
+    }
+
+    def "tags lock timeout with concurrency-limited reason"() {
+        given:
+        def lockFile = new File(cacheDir, "cache.lock")
+
+        when:
+        cache.loadLocally(key, { })
+
+        then:
+        1 * persistentCache.withFileLock(_ as Runnable) >> { throw new LockTimeoutException("Timeout waiting to lock local cache", lockFile) }
+        def ex = thrown(LockTimeoutException)
+        ex.message.contains("concurrency-limited:lock-contention:local-build-cache:load:")
+        ex.lockFile == lockFile
     }
 }

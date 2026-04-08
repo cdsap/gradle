@@ -18,6 +18,7 @@ package org.gradle.caching.local.internal;
 
 import com.google.common.io.Closer;
 import org.apache.commons.io.FileUtils;
+import org.gradle.cache.LockTimeoutException;
 import org.gradle.cache.PersistentCache;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.file.FileAccessTracker;
@@ -43,6 +44,7 @@ import java.util.function.Consumer;
 
 @NullMarked
 public class DirectoryBuildCache implements BuildCacheTempFileStore, Closeable, LocalBuildCache {
+    private static final String LOCK_CONTENTION_REASON_PREFIX = "concurrency-limited:lock-contention:local-build-cache";
 
     private final PersistentCache persistentCache;
     private final BuildCacheTempFileStore tempFileStore;
@@ -88,7 +90,7 @@ public class DirectoryBuildCache implements BuildCacheTempFileStore, Closeable, 
     @Override
     public void loadLocally(HashCode key, Consumer<? super File> reader) {
         // We need to lock other processes out here because garbage collection can be under way in another process
-        persistentCache.withFileLock(() -> {
+        withCacheLock("load", () -> {
             // Additional locking necessary because of https://github.com/gradle/gradle/issues/3537
             lock.readLock().lock();
             try {
@@ -144,7 +146,7 @@ public class DirectoryBuildCache implements BuildCacheTempFileStore, Closeable, 
     @Override
     public void storeLocally(HashCode key, File file) {
         // We need to lock other processes out here because garbage collection can be under way in another process
-        persistentCache.withFileLock(() -> {
+        withCacheLock("store", () -> {
             // Additional locking necessary because of https://github.com/gradle/gradle/issues/3537
             lock.writeLock().lock();
             try {
@@ -172,7 +174,7 @@ public class DirectoryBuildCache implements BuildCacheTempFileStore, Closeable, 
 
     @Override
     public void withTempFile(HashCode key, Consumer<? super File> action) {
-        persistentCache.withFileLock(() -> tempFileStore.withTempFile(key, action));
+        withCacheLock("temp-file", () -> tempFileStore.withTempFile(key, action));
     }
 
     @Override
@@ -182,5 +184,13 @@ public class DirectoryBuildCache implements BuildCacheTempFileStore, Closeable, 
 
     private File getCacheEntryFile(HashCode key) {
         return new File(persistentCache.getBaseDir(), key.toString());
+    }
+
+    private void withCacheLock(String operation, Runnable action) {
+        try {
+            persistentCache.withFileLock(action);
+        } catch (LockTimeoutException e) {
+            throw new LockTimeoutException(LOCK_CONTENTION_REASON_PREFIX + ":" + operation + ":" + e.getMessage(), e.getLockFile());
+        }
     }
 }

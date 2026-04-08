@@ -85,3 +85,38 @@ Phase 2 Slice 1 improves practical observability of concurrency limits:
 - daemon-client diagnostics now expose both reason details and category-level summaries
 
 This sets up the next slice: extending structured contention diagnostics to additional shared-state lock points (for example build cache and task-history related locking paths).
+
+---
+
+## Phase 2 Slice 2: Local Build Cache Contention Reasons
+
+Date: 2026-04-08
+
+Extended structured contention diagnostics to the local build cache lock path.
+
+### Implemented
+
+- Added lock-timeout wrapping in `DirectoryBuildCache` lock-protected operations:
+  - `loadLocally`
+  - `storeLocally`
+  - `withTempFile`
+- Lock timeout reasons are now tagged with:
+  - `concurrency-limited:lock-contention:local-build-cache:<operation>:...`
+- Preserved original lock-file reference from `LockTimeoutException`.
+
+Changed files:
+
+- `platforms/core-execution/build-cache-local/src/main/java/org/gradle/caching/local/internal/DirectoryBuildCache.java`
+- `platforms/core-execution/build-cache-local/src/test/groovy/org/gradle/caching/local/internal/DirectoryBuildCacheTest.groovy`
+
+### Validation
+
+Executed successfully:
+
+- `build-cache-local:test --tests org.gradle.caching.local.internal.DirectoryBuildCacheTest`
+- `client-services:test --tests org.gradle.launcher.daemon.client.DaemonClientTest` (regression check for Phase 2 Slice 1 diagnostics path)
+
+Run settings:
+
+- `--no-configuration-cache`
+- `-Dorg.gradle.unsafe.isolated-projects=false`
