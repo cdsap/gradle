@@ -73,6 +73,14 @@ class ConfigurationCacheRepository(
         private const val LOCK_WAIT_LOG_THRESHOLD_MILLIS = 200L
         private const val LOCK_REASON_PREFIX = "concurrency-limited:lock-contention:configuration-cache"
         private val LOGGER: Logger = Logging.getLogger(ConfigurationCacheRepository::class.java)
+
+        @JvmStatic
+        @VisibleForTesting
+        internal fun taggedLockTimeout(lockMode: FileLockManager.LockMode, e: LockTimeoutException): LockTimeoutException =
+            LockTimeoutException(
+                "$LOCK_REASON_PREFIX:${lockMode.name.lowercase(Locale.US)}:${e.message}",
+                e.lockFile
+            )
     }
 
     private
@@ -368,10 +376,7 @@ class ConfigurationCacheRepository(
                 "configuration cache concurrent invocation lock"
             )
         } catch (e: LockTimeoutException) {
-            throw LockTimeoutException(
-                "$LOCK_REASON_PREFIX:${lockMode.name.lowercase(Locale.US)}:${e.message}",
-                e.lockFile
-            )
+            throw taggedLockTimeout(lockMode, e)
         }
         val lockAcquireDurationMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lockAcquireStart)
         if (lockAcquireDurationMillis >= LOCK_WAIT_LOG_THRESHOLD_MILLIS) {
