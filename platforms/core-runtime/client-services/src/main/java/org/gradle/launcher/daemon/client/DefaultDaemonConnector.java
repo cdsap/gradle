@@ -16,6 +16,7 @@
 package org.gradle.launcher.daemon.client;
 
 import com.google.common.base.Preconditions;
+import org.gradle.cache.internal.ConcurrencyMode;
 import org.gradle.api.internal.specs.ExplainingSpec;
 import org.gradle.api.internal.specs.ExplainingSpecs;
 import org.gradle.api.logging.Logger;
@@ -60,6 +61,7 @@ public class DefaultDaemonConnector implements DaemonConnector {
     private static final Logger LOGGER = Logging.getLogger(DefaultDaemonConnector.class);
     public static final int DEFAULT_CONNECT_TIMEOUT = 30000;
     public static final int CANCELED_WAIT_TIMEOUT = 3000;
+    public static final int BUSY_WAIT_TIMEOUT = 5000;
     private final DaemonRegistry daemonRegistry;
     protected final OutgoingConnector connector;
     private final DaemonStarter daemonStarter;
@@ -133,6 +135,23 @@ public class DefaultDaemonConnector implements DaemonConnector {
         connection = connectToCanceledDaemon(busyDaemons, constraint);
         if (connection != null) {
             return connection;
+        }
+
+        // If in agentic mode, wait a bit for a busy daemon to become idle before starting a new one
+        if (ConcurrencyMode.isAgentic() && !getCompatibleDaemons(busyDaemons, constraint).isEmpty()) {
+            LOGGER.info("No idle daemons found. Waiting up to {}ms for a busy daemon to become idle (agentic mode)...", BUSY_WAIT_TIMEOUT);
+            CountdownTimer timer = Time.startCountdownTimer(BUSY_WAIT_TIMEOUT);
+            while (connection == null && !timer.hasExpired()) {
+                try {
+                    sleep(200);
+                    connection = connectToIdleDaemon(daemonRegistry.getIdle(), constraint);
+                } catch (InterruptedException e) {
+                    throw UncheckedException.throwAsUncheckedException(e);
+                }
+            }
+            if (connection != null) {
+                return connection;
+            }
         }
 
         // No compatible daemons available - start a new daemon

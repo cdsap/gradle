@@ -18,6 +18,7 @@ package org.gradle.caching.local.internal;
 
 import com.google.common.io.Closer;
 import org.apache.commons.io.FileUtils;
+import org.gradle.cache.FileLockManager;
 import org.gradle.cache.PersistentCache;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.file.FileAccessTracker;
@@ -88,7 +89,7 @@ public class DirectoryBuildCache implements BuildCacheTempFileStore, Closeable, 
     @Override
     public void loadLocally(HashCode key, Consumer<? super File> reader) {
         // We need to lock other processes out here because garbage collection can be under way in another process
-        persistentCache.withFileLock(() -> {
+        persistentCache.withFileLock(FileLockManager.LockMode.Shared, () -> {
             // Additional locking necessary because of https://github.com/gradle/gradle/issues/3537
             lock.readLock().lock();
             try {
@@ -144,7 +145,7 @@ public class DirectoryBuildCache implements BuildCacheTempFileStore, Closeable, 
     @Override
     public void storeLocally(HashCode key, File file) {
         // We need to lock other processes out here because garbage collection can be under way in another process
-        persistentCache.withFileLock(() -> {
+        persistentCache.withFileLock(FileLockManager.LockMode.Shared, () -> {
             // Additional locking necessary because of https://github.com/gradle/gradle/issues/3537
             lock.writeLock().lock();
             try {
@@ -172,7 +173,7 @@ public class DirectoryBuildCache implements BuildCacheTempFileStore, Closeable, 
 
     @Override
     public void withTempFile(HashCode key, Consumer<? super File> action) {
-        persistentCache.withFileLock(() -> tempFileStore.withTempFile(key, action));
+        persistentCache.withFileLock(FileLockManager.LockMode.Shared, () -> tempFileStore.withTempFile(key, action));
     }
 
     @Override
