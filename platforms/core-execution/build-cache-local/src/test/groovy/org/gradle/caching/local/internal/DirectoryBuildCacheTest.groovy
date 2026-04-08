@@ -151,4 +151,34 @@ class DirectoryBuildCacheTest extends Specification {
         ex.message.contains("concurrency-limited:lock-contention:local-build-cache:load:")
         ex.lockFile == lockFile
     }
+
+    def "tags lock timeout during store with concurrency-limited reason"() {
+        given:
+        def lockFile = new File(cacheDir, "cache.lock")
+        def file = temporaryFolder.createFile("to-store")
+        file.text = "payload"
+
+        when:
+        cache.storeLocally(key, file)
+
+        then:
+        1 * persistentCache.withFileLock(_ as Runnable) >> { throw new LockTimeoutException("Timeout waiting to lock local cache", lockFile) }
+        def ex = thrown(LockTimeoutException)
+        ex.message.contains("concurrency-limited:lock-contention:local-build-cache:store:")
+        ex.lockFile == lockFile
+    }
+
+    def "tags lock timeout during temp-file with concurrency-limited reason"() {
+        given:
+        def lockFile = new File(cacheDir, "cache.lock")
+
+        when:
+        cache.withTempFile(key, { })
+
+        then:
+        1 * persistentCache.withFileLock(_ as Runnable) >> { throw new LockTimeoutException("Timeout waiting to lock local cache", lockFile) }
+        def ex = thrown(LockTimeoutException)
+        ex.message.contains("concurrency-limited:lock-contention:local-build-cache:temp-file:")
+        ex.lockFile == lockFile
+    }
 }
