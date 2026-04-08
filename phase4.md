@@ -32,6 +32,6 @@ If no `BuildOperationRunner` is available (for example some minimal global servi
 
 ## Suggested follow-ups
 
-- Emit a **final status** or result object on successful acquire (elapsed wait time).
+- Emit a **final status** or result object on successful acquire (elapsed wait time). (**Done in Phase 5 / `phase5.md`.**)
 - Optional **parent operation** binding when lock wait happens off the main build thread.
 - Extend the same pattern to other high-contention locks if profiling warrants it.

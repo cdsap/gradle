@@ -34,6 +34,7 @@ import org.gradle.cache.internal.filelock.Version1LockStateSerializer;
 import org.gradle.api.logging.Logging;
 import org.gradle.cache.internal.locklistener.FileLockContentionHandler;
 import org.gradle.cache.internal.operations.AcquireGradleUserHomeFileLockDetails;
+import org.gradle.cache.internal.operations.AcquireGradleUserHomeFileLockResult;
 import org.gradle.internal.UncheckedException;
 import org.gradle.internal.concurrent.CompositeStoppable;
 import org.gradle.internal.concurrent.ConcurrentBuildInvocationContext;
@@ -510,7 +511,12 @@ public class DefaultFileLockManager implements FileLockManager {
 
                             @Override
                             public FileLockOutcome call(BuildOperationContext context) throws Exception {
-                                return executeLockStateRegionBackoff(backoff, lockMode, context::progress);
+                                long startNanos = System.nanoTime();
+                                boolean[] sawContention = new boolean[1];
+                                FileLockOutcome outcome = executeLockStateRegionBackoff(backoff, lockMode, context::progress, sawContention);
+                                long totalMs = (System.nanoTime() - startNanos) / 1_000_000L;
+                                context.setResult(new AcquireGradleUserHomeFileLockResult(totalMs, sawContention[0]));
+                                return outcome;
                             }
                         });
                     } catch (BuildOperationInvocationException e) {
@@ -521,15 +527,16 @@ public class DefaultFileLockManager implements FileLockManager {
                         throw e;
                     }
                 }
-                return executeLockStateRegionBackoff(backoff, lockMode, GRADLE_LOG::lifecycle);
+                return executeLockStateRegionBackoff(backoff, lockMode, GRADLE_LOG::lifecycle, null);
             }
-            return executeLockStateRegionBackoff(backoff, lockMode, null);
+            return executeLockStateRegionBackoff(backoff, lockMode, null, null);
         }
 
         private FileLockOutcome executeLockStateRegionBackoff(
             final ExponentialBackoff<AwaitableFileLockReleasedSignal> backoff,
             final LockMode lockMode,
-            final @Nullable Consumer<String> contentionProgress
+            final @Nullable Consumer<String> contentionProgress,
+            final boolean @Nullable [] lockAcquisitionSawContention
         ) throws IOException, InterruptedException {
             return backoff.retryUntil(new ExponentialBackoff.Query<FileLockOutcome>() {
                 private static final long CONCURRENT_DIAGNOSTIC_FIRST_MS = 1000;
@@ -543,6 +550,9 @@ public class DefaultFileLockManager implements FileLockManager {
                     FileLockOutcome lockOutcome = lockFileAccess.tryLockState(lockMode == LockMode.Shared);
                     if (lockOutcome.isLockWasAcquired()) {
                         return ExponentialBackoff.Result.successful(lockOutcome);
+                    }
+                    if (lockAcquisitionSawContention != null && lockAcquisitionSawContention.length > 0) {
+                        lockAcquisitionSawContention[0] = true;
                     }
                     if (contentionProgress != null) {
                         long elapsedMs = backoff.getTimer().getElapsedMillis();
