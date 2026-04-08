@@ -93,7 +93,8 @@ public class StartParameterBuildOptions extends BuildOptionSet<StartParameterInt
         new ProblemReportGenerationOption(),
         new PropertyUpgradeReportOption(),
         new TaskGraphOption(),
-        new ParallelToolingModelBuildingOption()
+        new ParallelToolingModelBuildingOption(),
+        new ConcurrentInvocationsOption()
     );
 
     @Override
@@ -1001,6 +1002,35 @@ public class StartParameterBuildOptions extends BuildOptionSet<StartParameterInt
         @Override
         public void applyTo(boolean value, StartParameterInternal settings, @Nullable Origin origin) {
             settings.setParallelToolingModelBuilding(Option.Value.value(value));
+        }
+    }
+
+    /**
+     * Opt-in for workflows that run multiple Gradle invocations concurrently (for example agent-driven builds).
+     */
+    public static class ConcurrentInvocationsOption extends BooleanBuildOption<StartParameterInternal> {
+        public static final String PROPERTY_NAME = "org.gradle.concurrent";
+        public static final String LONG_OPTION = "concurrent";
+
+        public ConcurrentInvocationsOption() {
+            super(
+                PROPERTY_NAME,
+                BooleanCommandLineOptionConfiguration.create(
+                    LONG_OPTION,
+                    "Tune Gradle for concurrent invocations sharing the same Gradle user home (incubating).",
+                    "Do not apply concurrent-invocation optimizations."
+                ).incubating()
+            );
+        }
+
+        @Override
+        public void applyTo(boolean value, StartParameterInternal settings, @Nullable Origin origin) {
+            settings.setConcurrentInvocationsEnabled(value);
+        }
+
+        @Override
+        protected OptionCategory getCategory() {
+            return OptionCategory.PERFORMANCE;
         }
     }
 }

@@ -123,7 +123,8 @@ object BuildModelParametersProvider {
             configureOnDemand = startParameter.isConfigureOnDemand,
             configurationCacheDisabledReason = null,
             parallelModelBuilding = false,
-            resilientModelBuilding = false
+            resilientModelBuilding = false,
+            concurrentInvocations = startParameter.isConcurrentInvocationsEnabled,
         )
     }
 
@@ -137,6 +138,7 @@ object BuildModelParametersProvider {
 
         val parallelProjectExecution = startParameter.isParallelProjectExecutionEnabled
         val parallelModelBuilding = parallelModelBuildingForVintage(startParameter)
+        val concurrentInvocations = startParameter.isConcurrentInvocationsEnabled
         return if (requirements.isCreatesModel) {
             GradleVintageMode(
                 modelBuilding = true,
@@ -145,6 +147,7 @@ object BuildModelParametersProvider {
                 configurationCacheDisabledReason = ccDisabledReason,
                 parallelModelBuilding = parallelModelBuilding,
                 resilientModelBuilding = options[resilientModelBuilding],
+                concurrentInvocations = concurrentInvocations,
             )
         } else {
             GradleVintageMode(
@@ -154,6 +157,7 @@ object BuildModelParametersProvider {
                 configurationCacheDisabledReason = ccDisabledReason,
                 parallelModelBuilding = false,
                 resilientModelBuilding = false,
+                concurrentInvocations = concurrentInvocations,
             )
         }
     }
@@ -178,11 +182,14 @@ object BuildModelParametersProvider {
         options: InternalOptions
     ): GradleConfigurationCacheMode {
 
+        val concurrentInvocations = startParameter.isConcurrentInvocationsEnabled
         return GradleConfigurationCacheMode(
             parallelProjectExecution = requirements.startParameter.isParallelProjectExecutionEnabled,
             configureOnDemand = startParameter.isConfigureOnDemand,
-            configurationCacheParallelStore = startParameter.isConfigurationCacheParallel && options[configurationCacheParallelStore],
+            // Concurrent workflows benefit from parallel store; can still be disabled via internal option.
+            configurationCacheParallelStore = (startParameter.isConfigurationCacheParallel || concurrentInvocations) && options[configurationCacheParallelStore],
             configurationCacheParallelLoad = options[configurationCacheParallelLoad],
+            concurrentInvocations = concurrentInvocations,
         )
     }
 
@@ -200,7 +207,8 @@ object BuildModelParametersProvider {
 
         val configureOnDemand = isolatedProjectsConfigureOnDemand.forInvocation(requirements, options)
         val parallelIsolatedProjects = isolatedProjectsParallel.forInvocation(requirements, options)
-        val parallelConfigurationCacheStore = parallelIsolatedProjects && options[configurationCacheParallelStore]
+        val concurrentInvocations = startParameter.isConcurrentInvocationsEnabled
+        val parallelConfigurationCacheStore = (parallelIsolatedProjects || concurrentInvocations) && options[configurationCacheParallelStore]
         val invalidateCoupledProjects = options[invalidateCoupledProjects]
 
         return if (requirements.isCreatesModel) {
@@ -214,7 +222,8 @@ object BuildModelParametersProvider {
                 parallelModelBuilding = parallelIsolatedProjects,
                 invalidateCoupledProjects = invalidateCoupledProjects,
                 modelAsProjectDependency = options[modelProjectDependencies],
-                resilientModelBuilding = options[resilientModelBuilding]
+                resilientModelBuilding = options[resilientModelBuilding],
+                concurrentInvocations = concurrentInvocations,
             )
         } else {
             GradleIsolatedProjectsMode(
@@ -227,7 +236,8 @@ object BuildModelParametersProvider {
                 parallelModelBuilding = false,
                 invalidateCoupledProjects = invalidateCoupledProjects,
                 modelAsProjectDependency = false,
-                resilientModelBuilding = false
+                resilientModelBuilding = false,
+                concurrentInvocations = concurrentInvocations,
             )
         }
     }

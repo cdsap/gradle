@@ -108,6 +108,14 @@ public interface BuildModelParameters {
     boolean isCachingModelBuilding();
 
     /**
+     * When true, the user opted into execution tuned for multiple concurrent Gradle invocations
+     * (for example agent-driven workflows) sharing the same machine and Gradle user home.
+     * <p>
+     * Individual features may consult this to relax unnecessary serialization where safe.
+     */
+    boolean isConcurrentInvocationsEnabled();
+
+    /**
      * Returns true if the model building is resilient so some failures in model building.
      *
      * @return true if the model building is resilient, false otherwise

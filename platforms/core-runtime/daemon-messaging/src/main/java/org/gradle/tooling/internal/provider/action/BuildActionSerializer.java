@@ -52,6 +52,7 @@ import org.gradle.tooling.internal.protocol.test.InternalTestSpec;
 import org.gradle.tooling.internal.provider.serialization.SerializedPayload;
 import org.gradle.tooling.internal.provider.serialization.SerializedPayloadSerializer;
 
+import java.io.EOFException;
 import java.io.File;
 import java.io.Serializable;
 import java.time.Duration;
@@ -175,6 +176,7 @@ public class BuildActionSerializer {
             encoder.writeNullableString(startParameter.getDevelocityUrl());
             encoder.writeNullableString(startParameter.getDevelocityPluginVersion());
             encoder.writeBoolean(startParameter.isNonInteractive());
+            encoder.writeBoolean(startParameter.isConcurrentInvocationsEnabled());
         }
 
         private void writeTaskRequests(Encoder encoder, List<TaskExecutionRequest> taskRequests) throws Exception {
@@ -278,6 +280,11 @@ public class BuildActionSerializer {
             startParameter.setDevelocityUrl(decoder.readNullableString());
             startParameter.setDevelocityPluginVersion(decoder.readNullableString());
             startParameter.setNonInteractive(decoder.readBoolean());
+            try {
+                startParameter.setConcurrentInvocationsEnabled(decoder.readBoolean());
+            } catch (EOFException e) {
+                startParameter.setConcurrentInvocationsEnabled(false);
+            }
 
             return startParameter;
         }

@@ -23,6 +23,7 @@ internal sealed class AbstractBuildModelParameters : BuildModelParameters {
 
     override fun toDisplayMap(): Map<String, Any?> = mapOf(
         "cachingModelBuilding" to isCachingModelBuilding,
+        "concurrentInvocations" to isConcurrentInvocationsEnabled,
         "configurationCache" to isConfigurationCache,
         "configurationCacheDisabledReason" to configurationCacheDisabledReason,
         "configurationCacheParallelLoad" to isConfigurationCacheParallelLoad,
@@ -46,11 +47,14 @@ internal class GradleVintageMode(
     private val configurationCacheDisabledReason: String?,
     private val parallelModelBuilding: Boolean,
     private val resilientModelBuilding: Boolean,
+    private val concurrentInvocations: Boolean,
 ) : AbstractBuildModelParameters() {
 
     override fun isParallelProjectExecution(): Boolean = parallelProjectExecution
 
     override fun isConfigureOnDemand(): Boolean = configureOnDemand
+
+    override fun isConcurrentInvocationsEnabled(): Boolean = concurrentInvocations
 
     override fun isConfigurationCache(): Boolean = false
     override fun getConfigurationCacheDisabledReason(): String? = configurationCacheDisabledReason
@@ -75,11 +79,14 @@ internal class GradleConfigurationCacheMode(
     private val configureOnDemand: Boolean,
     private val configurationCacheParallelStore: Boolean,
     private val configurationCacheParallelLoad: Boolean,
+    private val concurrentInvocations: Boolean,
 ) : AbstractBuildModelParameters() {
 
     override fun isParallelProjectExecution(): Boolean = parallelProjectExecution
 
     override fun isConfigureOnDemand(): Boolean = configureOnDemand
+
+    override fun isConcurrentInvocationsEnabled(): Boolean = concurrentInvocations
 
     override fun isConfigurationCache(): Boolean = true
     override fun getConfigurationCacheDisabledReason(): String? = null
@@ -109,12 +116,15 @@ internal class GradleIsolatedProjectsMode(
     private val parallelModelBuilding: Boolean,
     private val invalidateCoupledProjects: Boolean,
     private val modelAsProjectDependency: Boolean,
-    private val resilientModelBuilding: Boolean
+    private val resilientModelBuilding: Boolean,
+    private val concurrentInvocations: Boolean
 ) : AbstractBuildModelParameters() {
 
     override fun isParallelProjectExecution(): Boolean = parallelProjectExecution
 
     override fun isConfigureOnDemand(): Boolean = configureOnDemand
+
+    override fun isConcurrentInvocationsEnabled(): Boolean = concurrentInvocations
 
     override fun isConfigurationCache(): Boolean = true
     override fun getConfigurationCacheDisabledReason(): String? = null

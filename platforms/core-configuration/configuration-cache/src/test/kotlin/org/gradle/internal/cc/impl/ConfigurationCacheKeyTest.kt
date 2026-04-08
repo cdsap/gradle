@@ -93,6 +93,28 @@ class ConfigurationCacheKeyTest {
     }
 
     @Test
+    fun `cache key honours concurrent invocations option`() {
+        assertThat(
+            cacheKeyStringFromStartParameter {
+                isConcurrentInvocationsEnabled = true
+            },
+            equalTo(
+                cacheKeyStringFromStartParameter {
+                    isConcurrentInvocationsEnabled = true
+                }
+            )
+        )
+        assertThat(
+            cacheKeyStringFromStartParameter {
+                isConcurrentInvocationsEnabled = true
+            },
+            not(equalTo(cacheKeyStringFromStartParameter {
+                isConcurrentInvocationsEnabled = false
+            }))
+        )
+    }
+
+    @Test
     fun `cache key honours isolated projects option`() {
         assertThat(
             cacheKeyStringFromStartParameter {

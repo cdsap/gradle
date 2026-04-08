@@ -29,6 +29,8 @@ class BuildModelParametersProviderTest extends Specification {
 
     def defaults() {
         [
+            concurrentInvocations: false,
+
             parallelProjectExecution: false,
             configureOnDemand: false,
 
@@ -181,6 +183,23 @@ class BuildModelParametersProviderTest extends Specification {
             configurationCacheParallelLoad: true,
             configurationCacheParallelStore: false,
             parallelProjectExecution: false, // With CC, tasks are known to be isolated, so they run in parallel even without "parallel execution"
+        ])
+    }
+
+    def "concurrent invocations opt-in enables configuration cache parallel store for task-only runs"() {
+        given:
+        def params = parameters(runsTasks: true, createsModel: false) {
+            setConfigurationCache(Option.Value.value(true))
+            concurrentInvocationsEnabled = true
+        }
+
+        expect:
+        checkParameters(params.toDisplayMap(), defaults() + [
+            concurrentInvocations: true,
+            configurationCache: true,
+            configurationCacheParallelLoad: true,
+            configurationCacheParallelStore: true,
+            parallelProjectExecution: false,
         ])
     }
 
@@ -384,6 +403,30 @@ class BuildModelParametersProviderTest extends Specification {
         true  | true   | "false"    | false
 
         description = tasks && models ? "running tasks and building models" : (tasks ? 'running tasks' : 'building models')
+    }
+
+    def "concurrent invocations enables configuration cache parallel store when isolated projects parallel-ip is off"() {
+        given:
+        def params = parameters(runsTasks: true, createsModel: false) {
+            isolatedProjects = Option.Value.value(true)
+            concurrentInvocationsEnabled = true
+            systemPropertiesArgs[BuildModelParametersProvider.isolatedProjectsParallel.propertyName] = "false"
+        }
+
+        expect:
+        checkParameters(params.toDisplayMap(), defaults() + [
+            concurrentInvocations: true,
+            modelBuilding: false,
+            parallelProjectExecution: false,
+            configurationCache: true,
+            configurationCacheParallelStore: true,
+            configurationCacheParallelLoad: true,
+            isolatedProjects: true,
+            parallelProjectConfiguration: false,
+            parallelModelBuilding: false,
+            invalidateCoupledProjects: true,
+            modelAsProjectDependency: false,
+        ])
     }
 
     def "parameters when isolated projects are enabled for #description with caching-ip=#ipCaching"() {

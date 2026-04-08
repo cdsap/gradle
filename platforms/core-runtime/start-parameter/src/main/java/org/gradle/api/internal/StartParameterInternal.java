@@ -58,6 +58,7 @@ public class StartParameterInternal extends StartParameter {
     private boolean enableProblemReportGeneration = true;
     private boolean daemonJvmCriteriaConfigured = false;
     private Option.Value<Boolean> parallelToolingModelBuilding = Option.Value.defaultValue(false);
+    private boolean concurrentInvocations;
     private @Nullable String develocityUrl;
     private @Nullable String develocityPluginVersion;
 
@@ -103,6 +104,7 @@ public class StartParameterInternal extends StartParameter {
         p.enableProblemReportGeneration = enableProblemReportGeneration;
         p.daemonJvmCriteriaConfigured = daemonJvmCriteriaConfigured;
         p.parallelToolingModelBuilding = parallelToolingModelBuilding;
+        p.concurrentInvocations = concurrentInvocations;
         return p;
     }
 
@@ -342,6 +344,18 @@ public class StartParameterInternal extends StartParameter {
 
     public void setParallelToolingModelBuilding(Option.Value<Boolean> parallelToolingModelBuilding) {
         this.parallelToolingModelBuilding = parallelToolingModelBuilding;
+    }
+
+    /**
+     * When true, Gradle may apply behaviors tuned for multiple concurrent invocations on this machine
+     * (see Agent-driven / concurrent workflow support). Default is false.
+     */
+    public boolean isConcurrentInvocationsEnabled() {
+        return concurrentInvocations;
+    }
+
+    public void setConcurrentInvocationsEnabled(boolean concurrentInvocations) {
+        this.concurrentInvocations = concurrentInvocations;
     }
 
     @Nullable

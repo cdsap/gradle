@@ -69,6 +69,7 @@ class ConfigurationCacheKey(
 
         putBoolean(startParameter.isOffline)
         putBoolean(startParameter.isIsolatedProjects)
+        putBoolean(startParameter.isConcurrentInvocationsEnabled)
         putBuildScan()
         putDevelocityUrl()
         putDevelocityPluginVersion()
