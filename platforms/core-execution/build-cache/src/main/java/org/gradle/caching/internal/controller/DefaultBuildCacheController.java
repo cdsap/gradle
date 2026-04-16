@@ -70,6 +70,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 public class DefaultBuildCacheController implements BuildCacheController {
     @VisibleForTesting
@@ -79,6 +80,7 @@ public class DefaultBuildCacheController implements BuildCacheController {
     final LocalBuildCacheServiceHandle local;
 
     private final BuildCacheTempFileStore tmp;
+    private final BuildCacheTempFileStore fallbackTmp;
     private final PackOperationExecutor packExecutor;
 
     private boolean closed;
@@ -98,6 +100,7 @@ public class DefaultBuildCacheController implements BuildCacheController {
         this.local = toLocalHandle(config.getLocal(), config.isLocalPush(), buildOperationRunner);
         this.remote = toRemoteHandle(config.getBuildPath(), config.getRemote(), config.isRemotePush(), buildOperationRunner, buildOperationProgressEventEmitter, logStackTraces, disableRemoteOnError, blockingNotifier);
         this.tmp = toTempFileStore(config.getLocal(), temporaryFileFactory);
+        this.fallbackTmp = new DefaultBuildCacheTempFileStore(temporaryFileFactory);
         this.packExecutor = new PackOperationExecutor(
             buildOperationRunner,
             packer,
@@ -124,6 +127,9 @@ public class DefaultBuildCacheController implements BuildCacheController {
         try {
             return local.maybeLoad(key, file -> packExecutor.unpack(key, entity, file));
         } catch (Exception e) {
+            if (isLocalCacheLockContention(e)) {
+                return Optional.empty();
+            }
             throw new BuildCacheOperationException("Could not load from local cache: " + e.getMessage(), e);
         }
     }
@@ -133,7 +139,7 @@ public class DefaultBuildCacheController implements BuildCacheController {
             return Optional.empty();
         }
         AtomicReference<Optional<BuildCacheLoadResult>> result = new AtomicReference<>(Optional.empty());
-        tmp.withTempFile(((BuildCacheKeyInternal) key).getHashCodeInternal(), file -> {
+        withTempFile(((BuildCacheKeyInternal) key).getHashCodeInternal(), file -> {
             Optional<BuildCacheLoadResult> remoteResult;
             try {
                 remoteResult = remote.maybeLoad(key, file, f -> packExecutor.unpack(key, entity, f));
@@ -141,7 +147,7 @@ public class DefaultBuildCacheController implements BuildCacheController {
                 throw new BuildCacheOperationException("Could not load from remote cache: " + e.getMessage(), e);
             }
             if (remoteResult.isPresent()) {
-                local.maybeStore(key, file);
+                maybeStoreLocally(key, file);
                 result.set(remoteResult);
             }
         });
@@ -153,11 +159,47 @@ public class DefaultBuildCacheController implements BuildCacheController {
         if (!local.canStore() && !remote.canStore()) {
             return;
         }
-        tmp.withTempFile(((BuildCacheKeyInternal) key).getHashCodeInternal(), file -> {
+        withTempFile(((BuildCacheKeyInternal) key).getHashCodeInternal(), file -> {
             packExecutor.pack(file, key, entity, snapshots, executionTime);
             remote.maybeStore(key, file);
-            local.maybeStore(key, file);
+            maybeStoreLocally(key, file);
         });
+    }
+
+    private void withTempFile(HashCode key, Consumer<? super File> action) {
+        try {
+            tmp.withTempFile(key, action);
+        } catch (Exception e) {
+            if (!isLocalCacheLockContention(e)) {
+                throw e;
+            }
+            fallbackTmp.withTempFile(key, action);
+        }
+    }
+
+    private void maybeStoreLocally(BuildCacheKey key, File file) {
+        try {
+            local.maybeStore(key, file);
+        } catch (Exception e) {
+            if (!isLocalCacheLockContention(e)) {
+                throw new BuildCacheOperationException("Could not store in local cache: " + e.getMessage(), e);
+            }
+        }
+    }
+
+    private static boolean isLocalCacheLockContention(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && (
+                message.contains("concurrency-limited:lock-contention:local-build-cache")
+                    || message.contains("Timeout waiting to lock Build cache")
+            )) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     @Override

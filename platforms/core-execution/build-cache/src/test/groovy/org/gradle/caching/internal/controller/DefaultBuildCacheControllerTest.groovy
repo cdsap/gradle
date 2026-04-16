@@ -158,6 +158,21 @@ class DefaultBuildCacheControllerTest extends Specification {
         0 * local.storeLocally(key, _)
     }
 
+    def "local load lock timeout is suppressed and remote load can continue"() {
+        given:
+        1 * local.loadLocally(key, _) >> { throw new RuntimeException("Timeout waiting to lock Build cache (/home/.gradle/caches/build-cache-1)") }
+        1 * remote.load(key, _) >> { BuildCacheKey cacheKey, BuildCacheEntryReader reader ->
+            reader.readFrom(new ByteArrayInputStream("foo".bytes))
+            true
+        }
+
+        when:
+        controller.load(key, cacheableEntity)
+
+        then:
+        noExceptionThrown()
+    }
+
     def "remote load also stores to local"() {
         given:
         1 * local.loadLocally(key, _) // miss
@@ -171,6 +186,35 @@ class DefaultBuildCacheControllerTest extends Specification {
 
         then:
         1 * local.storeLocally(key, _)
+    }
+
+    def "local store lock timeout is suppressed"() {
+        given:
+        1 * local.storeLocally(key, _) >> { throw new RuntimeException("Timeout waiting to lock Build cache (/home/.gradle/caches/build-cache-1)") }
+
+        when:
+        controller.store(key, cacheableEntity, snapshots, executionTime)
+
+        then:
+        noExceptionThrown()
+    }
+
+    def "local temp file lock timeout falls back to non-local temp file for remote cache operation"() {
+        given:
+        local = Mock(Local) {
+            1 * loadLocally(key, _) // local miss
+            1 * withTempFile(_ as HashCode, _ as Consumer) >> { throw new RuntimeException("concurrency-limited:lock-contention:local-build-cache:temp-file:Timeout waiting to lock Build cache (/home/.gradle/caches/build-cache-1)") }
+        }
+        1 * remote.load(key, _) >> { BuildCacheKey cacheKey, BuildCacheEntryReader reader ->
+            reader.readFrom(new ByteArrayInputStream("foo".bytes))
+            true
+        }
+
+        when:
+        controller.load(key, cacheableEntity)
+
+        then:
+        noExceptionThrown()
     }
 
     def "remote load does not store to local if local is disabled"() {
