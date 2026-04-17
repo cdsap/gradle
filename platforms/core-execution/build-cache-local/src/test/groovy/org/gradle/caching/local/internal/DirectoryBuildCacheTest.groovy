@@ -37,7 +37,7 @@ class DirectoryBuildCacheTest extends Specification {
         withFileLock(_) >> { Runnable r -> r.run() }
     }
     def fileAccessTracker = Mock(FileAccessTracker)
-    def cache = new DirectoryBuildCache(persistentCache, fileAccessTracker, ".failed")
+    def cache = new DirectoryBuildCache(persistentCache, fileAccessTracker, ".failed", false)
     def key = TestHashCodes.hashCodeFrom(12345678)
     def hashCode = key.toString()
 
@@ -181,4 +181,5 @@ class DirectoryBuildCacheTest extends Specification {
         ex.message.contains("concurrency-limited:lock-contention:local-build-cache:temp-file:")
         ex.lockFile == lockFile
     }
+
 }

@@ -36,8 +36,8 @@ public class DirectoryBuildCacheService implements LocalBuildCacheService, Build
 
     private final DirectoryBuildCache cache;
 
-    public DirectoryBuildCacheService(PersistentCache persistentCache, FileAccessTracker fileAccessTracker, String failedFileSuffix) {
-        this.cache = new DirectoryBuildCache(persistentCache, fileAccessTracker, failedFileSuffix);
+    public DirectoryBuildCacheService(PersistentCache persistentCache, FileAccessTracker fileAccessTracker, String failedFileSuffix, boolean failFastOnLikelyContention) {
+        this.cache = new DirectoryBuildCache(persistentCache, fileAccessTracker, failedFileSuffix, failFastOnLikelyContention);
     }
 
     @Override

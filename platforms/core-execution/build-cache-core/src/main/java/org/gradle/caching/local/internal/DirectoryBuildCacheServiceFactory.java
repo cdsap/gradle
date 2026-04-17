@@ -16,6 +16,7 @@
 
 package org.gradle.caching.local.internal;
 
+import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.cache.CacheConfigurationsInternal;
 import org.gradle.cache.CacheCleanupStrategy;
 import org.gradle.cache.CacheCleanupStrategyFactory;
@@ -50,6 +51,7 @@ public class DirectoryBuildCacheServiceFactory implements BuildCacheServiceFacto
 
     private final UnscopedCacheBuilderFactory unscopedCacheBuilderFactory;
     private final GlobalScopedCacheBuilderFactory cacheBuilderFactory;
+    private final StartParameterInternal startParameter;
     private final PathToFileResolver resolver;
     private final FileAccessTimeJournal fileAccessTimeJournal;
     private final CacheConfigurationsInternal cacheConfigurations;
@@ -59,6 +61,7 @@ public class DirectoryBuildCacheServiceFactory implements BuildCacheServiceFacto
     public DirectoryBuildCacheServiceFactory(
         UnscopedCacheBuilderFactory unscopedCacheBuilderFactory,
         GlobalScopedCacheBuilderFactory cacheBuilderFactory,
+        StartParameterInternal startParameter,
         PathToFileResolver resolver,
         FileAccessTimeJournal fileAccessTimeJournal,
         CacheConfigurationsInternal cacheConfigurations,
@@ -66,6 +69,7 @@ public class DirectoryBuildCacheServiceFactory implements BuildCacheServiceFacto
     ) {
         this.unscopedCacheBuilderFactory = unscopedCacheBuilderFactory;
         this.cacheBuilderFactory = cacheBuilderFactory;
+        this.startParameter = startParameter;
         this.resolver = resolver;
         this.fileAccessTimeJournal = fileAccessTimeJournal;
         this.cacheConfigurations = cacheConfigurations;
@@ -97,7 +101,7 @@ public class DirectoryBuildCacheServiceFactory implements BuildCacheServiceFacto
             .open();
         FileAccessTracker fileAccessTracker = new SingleDepthFileAccessTracker(fileAccessTimeJournal, target, FILE_TREE_DEPTH_TO_TRACK_AND_CLEANUP);
 
-        return new DirectoryBuildCacheService(persistentCache, fileAccessTracker, FAILED_READ_SUFFIX);
+        return new DirectoryBuildCacheService(persistentCache, fileAccessTracker, FAILED_READ_SUFFIX, startParameter.isConcurrentInvocationModeEnabled());
     }
 
     private CacheCleanupStrategy createCacheCleanupStrategy(Supplier<Long> removeUnusedEntriesTimestamp) {

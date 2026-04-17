@@ -33,7 +33,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.io.UncheckedIOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -50,9 +53,11 @@ public class DirectoryBuildCache implements BuildCacheTempFileStore, Closeable, 
     private final BuildCacheTempFileStore tempFileStore;
     private final FileAccessTracker fileAccessTracker;
     private final String failedFileSuffix;
+    private final boolean failFastOnLikelyContention;
+    private final File cacheLockFile;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
-    public DirectoryBuildCache(PersistentCache persistentCache, FileAccessTracker fileAccessTracker, String failedFileSuffix) {
+    public DirectoryBuildCache(PersistentCache persistentCache, FileAccessTracker fileAccessTracker, String failedFileSuffix, boolean failFastOnLikelyContention) {
         this.persistentCache = persistentCache;
         // Create temporary files in the cache directory to ensure they are on the same file system,
         // and thus can always be moved into the cache proper atomically
@@ -65,6 +70,8 @@ public class DirectoryBuildCache implements BuildCacheTempFileStore, Closeable, 
         });
         this.fileAccessTracker = fileAccessTracker;
         this.failedFileSuffix = failedFileSuffix;
+        this.failFastOnLikelyContention = failFastOnLikelyContention;
+        this.cacheLockFile = new File(persistentCache.getBaseDir(), persistentCache.getBaseDir().getName() + ".lock");
     }
 
     @Override
@@ -188,9 +195,39 @@ public class DirectoryBuildCache implements BuildCacheTempFileStore, Closeable, 
 
     private void withCacheLock(String operation, Runnable action) {
         try {
+            if (failFastOnLikelyContention && isLikelyContendedByAnotherProcess()) {
+                throw new LockTimeoutException(LOCK_CONTENTION_REASON_PREFIX + ":" + operation + ":Failing fast due to local build cache lock contention", cacheLockFile);
+            }
             persistentCache.withFileLock(action);
         } catch (LockTimeoutException e) {
+            if (e.getMessage() != null && e.getMessage().contains(LOCK_CONTENTION_REASON_PREFIX + ":" + operation + ":")) {
+                throw e;
+            }
             throw new LockTimeoutException(LOCK_CONTENTION_REASON_PREFIX + ":" + operation + ":" + e.getMessage(), e.getLockFile());
+        }
+    }
+
+    private boolean isLikelyContendedByAnotherProcess() {
+        if (!cacheLockFile.exists()) {
+            return false;
+        }
+        try (RandomAccessFile randomAccessFile = new RandomAccessFile(cacheLockFile, "rw");
+             FileChannel channel = randomAccessFile.getChannel()) {
+            java.nio.channels.FileLock lock;
+            try {
+                lock = channel.tryLock();
+            } catch (OverlappingFileLockException ignored) {
+                // Another thread in this process may hold a lock region. Let standard locking proceed.
+                return false;
+            }
+            if (lock == null) {
+                return true;
+            }
+            try (java.nio.channels.FileLock ignored = lock) {
+                return false;
+            }
+        } catch (IOException e) {
+            return false;
         }
     }
 }

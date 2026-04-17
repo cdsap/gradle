@@ -197,7 +197,8 @@ class BuildCacheClientModule extends AbstractModule {
             return new DirectoryBuildCacheService(
                 persistentCache,
                 fileAccessTracker,
-                ".failed"
+                ".failed",
+                false
             );
         }
 
