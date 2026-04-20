@@ -15,22 +15,18 @@
  */
 package org.gradle.api.internal.artifacts
 
-import org.gradle.api.internal.StartParameterInternal
 import org.gradle.api.internal.artifacts.transform.ImmutableTransformWorkspaceServices
 import org.gradle.api.internal.cache.CacheConfigurationsInternal
 import org.gradle.api.internal.cache.CacheResourceConfigurationInternal
-import org.gradle.api.internal.file.temp.GradleUserHomeTemporaryFileProvider
+import org.gradle.cache.CleanupFrequency
 import org.gradle.cache.FineGrainedCacheBuilder
 import org.gradle.cache.FineGrainedCacheCleanupStrategyFactory
 import org.gradle.cache.FineGrainedMarkAndSweepCacheCleanupStrategy
 import org.gradle.cache.FineGrainedPersistentCache
-import org.gradle.cache.CleanupFrequency
 import org.gradle.cache.scopes.GlobalScopedCacheBuilderFactory
 import org.gradle.cache.internal.CrossBuildInMemoryCacheFactory
 import org.gradle.internal.execution.workspace.impl.CacheBasedImmutableWorkspaceProvider
-import org.gradle.internal.execution.workspace.impl.NonLockingImmutableWorkspaceProvider
 import org.gradle.internal.file.FileAccessTimeJournal
-import org.gradle.internal.service.scopes.CrossBuildSessionParameters
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.junit.Rule
 import spock.lang.Specification
@@ -59,7 +55,6 @@ class DependencyManagementGradleUserHomeScopeServicesTest extends Specification 
     def cleanupStrategyFactory = Stub(FineGrainedCacheCleanupStrategyFactory) {
         markAndSweepCleanupStrategy(_, _) >> Stub(FineGrainedMarkAndSweepCacheCleanupStrategy)
     }
-    def tempProvider = Mock(GradleUserHomeTemporaryFileProvider)
     def services = new DependencyManagementGradleUserHomeScopeServices()
 
     def setup() {
@@ -70,48 +65,17 @@ class DependencyManagementGradleUserHomeScopeServicesTest extends Specification 
         }
     }
 
-    def "uses shared cache-backed transform workspaces by default"() {
-        def startParameter = new StartParameterInternal()
-        def crossBuildSessionParameters = Stub(CrossBuildSessionParameters) {
-            getStartParameter() >> startParameter
-        }
-
+    def "uses shared cache-backed transform workspaces"() {
         when:
         ImmutableTransformWorkspaceServices result = services.createTransformWorkspaceServices(
             cacheBuilderFactory,
             crossBuildInMemoryCacheFactory,
             fileAccessTimeJournal,
             cacheConfigurations,
-            cleanupStrategyFactory,
-            crossBuildSessionParameters,
-            tempProvider
+            cleanupStrategyFactory
         )
 
         then:
         result.workspaceProvider instanceof CacheBasedImmutableWorkspaceProvider
-        0 * tempProvider.newTemporaryDirectory(_ as String[])
-    }
-
-    def "uses process-local transform workspaces in concurrent invocation mode"() {
-        def startParameter = new StartParameterInternal()
-        startParameter.setConcurrentInvocationModeEnabled(true)
-        def crossBuildSessionParameters = Stub(CrossBuildSessionParameters) {
-            getStartParameter() >> startParameter
-        }
-
-        when:
-        ImmutableTransformWorkspaceServices result = services.createTransformWorkspaceServices(
-            cacheBuilderFactory,
-            crossBuildInMemoryCacheFactory,
-            fileAccessTimeJournal,
-            cacheConfigurations,
-            cleanupStrategyFactory,
-            crossBuildSessionParameters,
-            tempProvider
-        )
-
-        then:
-        result.workspaceProvider instanceof NonLockingImmutableWorkspaceProvider
-        1 * tempProvider.newTemporaryDirectory(_ as String[]) >> temporaryFolder.testDirectory.file("tmp/transforms")
     }
 }

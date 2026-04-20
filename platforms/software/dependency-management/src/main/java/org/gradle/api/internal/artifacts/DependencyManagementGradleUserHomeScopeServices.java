@@ -25,7 +25,6 @@ import org.gradle.api.internal.artifacts.ivyservice.DefaultArtifactCaches;
 import org.gradle.api.internal.artifacts.transform.ImmutableTransformWorkspaceServices;
 import org.gradle.api.internal.artifacts.transform.ToPlannedTransformStepConverter;
 import org.gradle.api.internal.artifacts.transform.TransformExecutionResult;
-import org.gradle.api.internal.file.temp.GradleUserHomeTemporaryFileProvider;
 import org.gradle.api.internal.cache.CacheConfigurationsInternal;
 import org.gradle.cache.Cache;
 import org.gradle.cache.CacheCleanupStrategyFactory;
@@ -41,12 +40,9 @@ import org.gradle.internal.execution.DeferredResult;
 import org.gradle.internal.execution.Identity;
 import org.gradle.internal.execution.workspace.ImmutableWorkspaceProvider;
 import org.gradle.internal.execution.workspace.impl.CacheBasedImmutableWorkspaceProvider;
-import org.gradle.internal.execution.workspace.impl.NonLockingImmutableWorkspaceProvider;
 import org.gradle.internal.file.FileAccessTimeJournal;
-import org.gradle.internal.file.impl.SingleDepthFileAccessTracker;
 import org.gradle.internal.service.Provides;
 import org.gradle.internal.service.ServiceRegistrationProvider;
-import org.gradle.internal.service.scopes.CrossBuildSessionParameters;
 import org.gradle.internal.versionedcache.UsedGradleVersions;
 
 import java.io.Closeable;
@@ -102,27 +98,14 @@ public class DependencyManagementGradleUserHomeScopeServices implements ServiceR
         CrossBuildInMemoryCacheFactory crossBuildInMemoryCacheFactory,
         FileAccessTimeJournal fileAccessTimeJournal,
         CacheConfigurationsInternal cacheConfigurations,
-        FineGrainedCacheCleanupStrategyFactory cacheCleanupStrategyFactory,
-        CrossBuildSessionParameters crossBuildSessionParameters,
-        GradleUserHomeTemporaryFileProvider temporaryFileProvider
+        FineGrainedCacheCleanupStrategyFactory cacheCleanupStrategyFactory
     ) {
         FineGrainedCacheBuilder cacheBuilder = cacheBuilderFactory
             .createFineGrainedCacheBuilder(CacheLayout.TRANSFORMS.getName())
             .withDisplayName("Artifact transforms cache");
         CrossBuildInMemoryCache<Identity, DeferredResult<TransformExecutionResult.TransformWorkspaceResult>> identityCache = crossBuildInMemoryCacheFactory.newCacheRetainingDataFromPreviousBuild(result -> result.getResult().isSuccessful());
-        boolean concurrentInvocationModeEnabled = crossBuildSessionParameters.getStartParameter().isConcurrentInvocationModeEnabled();
-        ImmutableWorkspaceProvider workspaceProvider;
-        Closeable closeableWorkspaceProvider;
-        if (concurrentInvocationModeEnabled) {
-            java.io.File concurrentInvocationWorkspaceDirectory = temporaryFileProvider.newTemporaryDirectory("transforms-concurrent-invocations");
-            workspaceProvider = new NonLockingImmutableWorkspaceProvider(
-                new SingleDepthFileAccessTracker(fileAccessTimeJournal, concurrentInvocationWorkspaceDirectory, 1),
-                concurrentInvocationWorkspaceDirectory
-            );
-        } else {
-            workspaceProvider = CacheBasedImmutableWorkspaceProvider.createWorkspaceProvider(cacheBuilder, fileAccessTimeJournal, cacheConfigurations, cacheCleanupStrategyFactory);
-        }
-        closeableWorkspaceProvider = (Closeable) workspaceProvider;
+        ImmutableWorkspaceProvider workspaceProvider = CacheBasedImmutableWorkspaceProvider.createWorkspaceProvider(cacheBuilder, fileAccessTimeJournal, cacheConfigurations, cacheCleanupStrategyFactory);
+        Closeable closeableWorkspaceProvider = (Closeable) workspaceProvider;
         return new ImmutableTransformWorkspaceServices() {
             @Override
             public ImmutableWorkspaceProvider getWorkspaceProvider() {

@@ -35,6 +35,7 @@ import org.gradle.api.internal.ConfigurationServicesBundle;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.DomainObjectContext;
 import org.gradle.api.internal.GradleInternal;
+import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.artifacts.configurations.ConfigurationContainerInternal;
 import org.gradle.api.internal.artifacts.configurations.DefaultConfigurationContainer;
 import org.gradle.api.internal.artifacts.configurations.DefaultConfigurationFactory;
@@ -101,6 +102,7 @@ import org.gradle.api.internal.attributes.AttributesSchemaInternal;
 import org.gradle.api.internal.attributes.DefaultAttributesSchema;
 import org.gradle.api.internal.collections.DomainObjectCollectionFactory;
 import org.gradle.api.internal.file.FileCollectionFactory;
+import org.gradle.api.internal.file.temp.GradleUserHomeTemporaryFileProvider;
 import org.gradle.api.internal.file.FileLookup;
 import org.gradle.api.internal.file.FilePropertyFactory;
 import org.gradle.api.internal.file.FileResolver;
@@ -129,6 +131,7 @@ import org.gradle.internal.execution.InputFingerprinter;
 import org.gradle.internal.execution.history.ExecutionHistoryStore;
 import org.gradle.internal.execution.workspace.MutableWorkspaceProvider;
 import org.gradle.internal.execution.workspace.impl.NonLockingMutableWorkspaceProvider;
+import org.gradle.internal.file.FileAccessTimeJournal;
 import org.gradle.internal.hash.ChecksumService;
 import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
 import org.gradle.internal.instantiation.InstanceGenerator;
@@ -303,7 +306,10 @@ public class DefaultDependencyManagementServices implements DependencyManagement
             FileCollectionFactory fileCollectionFactory,
             ProjectStateRegistry projectStateRegistry,
             BuildOperationRunner buildOperationRunner,
-            BuildOperationProgressEventEmitter progressEventEmitter
+            BuildOperationProgressEventEmitter progressEventEmitter,
+            StartParameter startParameter,
+            FileAccessTimeJournal fileAccessTimeJournal,
+            GradleUserHomeTemporaryFileProvider temporaryFileProvider
         ) {
             return new DefaultTransformInvocationFactory(
                 executionEngine,
@@ -313,7 +319,10 @@ public class DefaultDependencyManagementServices implements DependencyManagement
                 fileCollectionFactory,
                 projectStateRegistry,
                 buildOperationRunner,
-                progressEventEmitter
+                progressEventEmitter,
+                (StartParameterInternal) startParameter,
+                fileAccessTimeJournal,
+                temporaryFileProvider
             );
         }
 

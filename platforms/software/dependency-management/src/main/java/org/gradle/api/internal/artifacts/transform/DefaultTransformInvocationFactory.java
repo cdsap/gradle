@@ -19,8 +19,10 @@ package org.gradle.api.internal.artifacts.transform;
 import com.google.common.collect.ImmutableList;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
+import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.artifacts.transform.TransformExecutionResult.TransformWorkspaceResult;
 import org.gradle.api.internal.file.FileCollectionFactory;
+import org.gradle.api.internal.file.temp.GradleUserHomeTemporaryFileProvider;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.cache.Cache;
@@ -33,6 +35,10 @@ import org.gradle.internal.execution.ExecutionEngine;
 import org.gradle.internal.execution.Identity;
 import org.gradle.internal.execution.InputFingerprinter;
 import org.gradle.internal.execution.UnitOfWork;
+import org.gradle.internal.execution.workspace.ImmutableWorkspaceProvider;
+import org.gradle.internal.execution.workspace.impl.NonLockingImmutableWorkspaceProvider;
+import org.gradle.internal.file.FileAccessTimeJournal;
+import org.gradle.internal.file.impl.SingleDepthFileAccessTracker;
 import org.gradle.internal.operations.BuildOperationProgressEventEmitter;
 import org.gradle.internal.operations.BuildOperationRunner;
 import org.jspecify.annotations.Nullable;
@@ -49,6 +55,7 @@ public class DefaultTransformInvocationFactory implements TransformInvocationFac
     private final InternalOptions internalOptions;
     private final TransformExecutionListener transformExecutionListener;
     private final ImmutableTransformWorkspaceServices immutableWorkspaceServices;
+    private final ImmutableWorkspaceProvider immutableWorkspaceProvider;
     private final FileCollectionFactory fileCollectionFactory;
     private final ProjectStateRegistry projectStateRegistry;
     private final BuildOperationRunner buildOperationRunner;
@@ -62,12 +69,16 @@ public class DefaultTransformInvocationFactory implements TransformInvocationFac
         FileCollectionFactory fileCollectionFactory,
         ProjectStateRegistry projectStateRegistry,
         BuildOperationRunner buildOperationRunner,
-        BuildOperationProgressEventEmitter progressEventEmitter
+        BuildOperationProgressEventEmitter progressEventEmitter,
+        StartParameterInternal startParameter,
+        FileAccessTimeJournal fileAccessTimeJournal,
+        GradleUserHomeTemporaryFileProvider temporaryFileProvider
     ) {
         this.executionEngine = executionEngine;
         this.internalOptions = internalOptions;
         this.transformExecutionListener = transformExecutionListener;
         this.immutableWorkspaceServices = immutableWorkspaceServices;
+        this.immutableWorkspaceProvider = createImmutableWorkspaceProvider(immutableWorkspaceServices, startParameter, fileAccessTimeJournal, temporaryFileProvider);
         this.fileCollectionFactory = fileCollectionFactory;
         this.projectStateRegistry = projectStateRegistry;
         this.buildOperationRunner = buildOperationRunner;
@@ -124,7 +135,7 @@ public class DefaultTransformInvocationFactory implements TransformInvocationFac
                 progressEventEmitter,
                 fileCollectionFactory,
                 inputFingerprinter,
-                immutableWorkspaceServices.getWorkspaceProvider(),
+                immutableWorkspaceProvider,
 
                 cachingDisabledByProperty
             );
@@ -157,5 +168,21 @@ public class DefaultTransformInvocationFactory implements TransformInvocationFac
         }
 
         return false;
+    }
+
+    static ImmutableWorkspaceProvider createImmutableWorkspaceProvider(
+        ImmutableTransformWorkspaceServices immutableWorkspaceServices,
+        StartParameterInternal startParameter,
+        FileAccessTimeJournal fileAccessTimeJournal,
+        GradleUserHomeTemporaryFileProvider temporaryFileProvider
+    ) {
+        if (startParameter.isConcurrentInvocationModeEnabled()) {
+            File concurrentInvocationWorkspaceDirectory = temporaryFileProvider.newTemporaryDirectory("transforms-concurrent-invocations");
+            return new NonLockingImmutableWorkspaceProvider(
+                new SingleDepthFileAccessTracker(fileAccessTimeJournal, concurrentInvocationWorkspaceDirectory, 1),
+                concurrentInvocationWorkspaceDirectory
+            );
+        }
+        return immutableWorkspaceServices.getWorkspaceProvider();
     }
 }
