@@ -18,6 +18,7 @@ package org.gradle.api.internal.artifacts;
 
 import org.gradle.BuildAdapter;
 import org.gradle.BuildResult;
+import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCachesProvider;
 import org.gradle.api.internal.artifacts.ivyservice.CacheLayout;
@@ -25,6 +26,7 @@ import org.gradle.api.internal.artifacts.ivyservice.DefaultArtifactCaches;
 import org.gradle.api.internal.artifacts.transform.ImmutableTransformWorkspaceServices;
 import org.gradle.api.internal.artifacts.transform.ToPlannedTransformStepConverter;
 import org.gradle.api.internal.artifacts.transform.TransformExecutionResult;
+import org.gradle.api.internal.file.temp.GradleUserHomeTemporaryFileProvider;
 import org.gradle.api.internal.cache.CacheConfigurationsInternal;
 import org.gradle.cache.Cache;
 import org.gradle.cache.CacheCleanupStrategyFactory;
@@ -40,10 +42,14 @@ import org.gradle.internal.execution.DeferredResult;
 import org.gradle.internal.execution.Identity;
 import org.gradle.internal.execution.workspace.ImmutableWorkspaceProvider;
 import org.gradle.internal.execution.workspace.impl.CacheBasedImmutableWorkspaceProvider;
+import org.gradle.internal.execution.workspace.impl.NonLockingImmutableWorkspaceProvider;
 import org.gradle.internal.file.FileAccessTimeJournal;
+import org.gradle.internal.file.impl.SingleDepthFileAccessTracker;
 import org.gradle.internal.service.Provides;
 import org.gradle.internal.service.ServiceRegistrationProvider;
 import org.gradle.internal.versionedcache.UsedGradleVersions;
+
+import java.io.Closeable;
 
 public class DependencyManagementGradleUserHomeScopeServices implements ServiceRegistrationProvider {
 
@@ -96,13 +102,26 @@ public class DependencyManagementGradleUserHomeScopeServices implements ServiceR
         CrossBuildInMemoryCacheFactory crossBuildInMemoryCacheFactory,
         FileAccessTimeJournal fileAccessTimeJournal,
         CacheConfigurationsInternal cacheConfigurations,
-        FineGrainedCacheCleanupStrategyFactory cacheCleanupStrategyFactory
+        FineGrainedCacheCleanupStrategyFactory cacheCleanupStrategyFactory,
+        StartParameterInternal startParameter,
+        GradleUserHomeTemporaryFileProvider temporaryFileProvider
     ) {
         FineGrainedCacheBuilder cacheBuilder = cacheBuilderFactory
             .createFineGrainedCacheBuilder(CacheLayout.TRANSFORMS.getName())
             .withDisplayName("Artifact transforms cache");
         CrossBuildInMemoryCache<Identity, DeferredResult<TransformExecutionResult.TransformWorkspaceResult>> identityCache = crossBuildInMemoryCacheFactory.newCacheRetainingDataFromPreviousBuild(result -> result.getResult().isSuccessful());
-        CacheBasedImmutableWorkspaceProvider workspaceProvider = CacheBasedImmutableWorkspaceProvider.createWorkspaceProvider(cacheBuilder, fileAccessTimeJournal, cacheConfigurations, cacheCleanupStrategyFactory);
+        ImmutableWorkspaceProvider workspaceProvider;
+        Closeable closeableWorkspaceProvider;
+        if (startParameter.isConcurrentInvocationModeEnabled()) {
+            java.io.File concurrentInvocationWorkspaceDirectory = temporaryFileProvider.newTemporaryDirectory("transforms-concurrent-invocations");
+            workspaceProvider = new NonLockingImmutableWorkspaceProvider(
+                new SingleDepthFileAccessTracker(fileAccessTimeJournal, concurrentInvocationWorkspaceDirectory, 1),
+                concurrentInvocationWorkspaceDirectory
+            );
+        } else {
+            workspaceProvider = CacheBasedImmutableWorkspaceProvider.createWorkspaceProvider(cacheBuilder, fileAccessTimeJournal, cacheConfigurations, cacheCleanupStrategyFactory);
+        }
+        closeableWorkspaceProvider = (Closeable) workspaceProvider;
         return new ImmutableTransformWorkspaceServices() {
             @Override
             public ImmutableWorkspaceProvider getWorkspaceProvider() {
@@ -115,8 +134,8 @@ public class DependencyManagementGradleUserHomeScopeServices implements ServiceR
             }
 
             @Override
-            public void close() {
-                workspaceProvider.close();
+            public void close() throws java.io.IOException {
+                closeableWorkspaceProvider.close();
             }
         };
     }
