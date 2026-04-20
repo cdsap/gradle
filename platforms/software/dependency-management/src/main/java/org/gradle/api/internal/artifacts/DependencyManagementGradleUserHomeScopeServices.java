@@ -18,7 +18,6 @@ package org.gradle.api.internal.artifacts;
 
 import org.gradle.BuildAdapter;
 import org.gradle.BuildResult;
-import org.gradle.api.internal.StartParameterInternal;
 import org.gradle.api.internal.DocumentationRegistry;
 import org.gradle.api.internal.artifacts.ivyservice.ArtifactCachesProvider;
 import org.gradle.api.internal.artifacts.ivyservice.CacheLayout;
@@ -47,6 +46,7 @@ import org.gradle.internal.file.FileAccessTimeJournal;
 import org.gradle.internal.file.impl.SingleDepthFileAccessTracker;
 import org.gradle.internal.service.Provides;
 import org.gradle.internal.service.ServiceRegistrationProvider;
+import org.gradle.internal.service.scopes.CrossBuildSessionParameters;
 import org.gradle.internal.versionedcache.UsedGradleVersions;
 
 import java.io.Closeable;
@@ -103,16 +103,17 @@ public class DependencyManagementGradleUserHomeScopeServices implements ServiceR
         FileAccessTimeJournal fileAccessTimeJournal,
         CacheConfigurationsInternal cacheConfigurations,
         FineGrainedCacheCleanupStrategyFactory cacheCleanupStrategyFactory,
-        StartParameterInternal startParameter,
+        CrossBuildSessionParameters crossBuildSessionParameters,
         GradleUserHomeTemporaryFileProvider temporaryFileProvider
     ) {
         FineGrainedCacheBuilder cacheBuilder = cacheBuilderFactory
             .createFineGrainedCacheBuilder(CacheLayout.TRANSFORMS.getName())
             .withDisplayName("Artifact transforms cache");
         CrossBuildInMemoryCache<Identity, DeferredResult<TransformExecutionResult.TransformWorkspaceResult>> identityCache = crossBuildInMemoryCacheFactory.newCacheRetainingDataFromPreviousBuild(result -> result.getResult().isSuccessful());
+        boolean concurrentInvocationModeEnabled = crossBuildSessionParameters.getStartParameter().isConcurrentInvocationModeEnabled();
         ImmutableWorkspaceProvider workspaceProvider;
         Closeable closeableWorkspaceProvider;
-        if (startParameter.isConcurrentInvocationModeEnabled()) {
+        if (concurrentInvocationModeEnabled) {
             java.io.File concurrentInvocationWorkspaceDirectory = temporaryFileProvider.newTemporaryDirectory("transforms-concurrent-invocations");
             workspaceProvider = new NonLockingImmutableWorkspaceProvider(
                 new SingleDepthFileAccessTracker(fileAccessTimeJournal, concurrentInvocationWorkspaceDirectory, 1),

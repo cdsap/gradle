@@ -30,6 +30,7 @@ import org.gradle.cache.internal.CrossBuildInMemoryCacheFactory
 import org.gradle.internal.execution.workspace.impl.CacheBasedImmutableWorkspaceProvider
 import org.gradle.internal.execution.workspace.impl.NonLockingImmutableWorkspaceProvider
 import org.gradle.internal.file.FileAccessTimeJournal
+import org.gradle.internal.service.scopes.CrossBuildSessionParameters
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.junit.Rule
 import spock.lang.Specification
@@ -71,6 +72,9 @@ class DependencyManagementGradleUserHomeScopeServicesTest extends Specification 
 
     def "uses shared cache-backed transform workspaces by default"() {
         def startParameter = new StartParameterInternal()
+        def crossBuildSessionParameters = Stub(CrossBuildSessionParameters) {
+            getStartParameter() >> startParameter
+        }
 
         when:
         ImmutableTransformWorkspaceServices result = services.createTransformWorkspaceServices(
@@ -79,7 +83,7 @@ class DependencyManagementGradleUserHomeScopeServicesTest extends Specification 
             fileAccessTimeJournal,
             cacheConfigurations,
             cleanupStrategyFactory,
-            startParameter,
+            crossBuildSessionParameters,
             tempProvider
         )
 
@@ -91,6 +95,9 @@ class DependencyManagementGradleUserHomeScopeServicesTest extends Specification 
     def "uses process-local transform workspaces in concurrent invocation mode"() {
         def startParameter = new StartParameterInternal()
         startParameter.setConcurrentInvocationModeEnabled(true)
+        def crossBuildSessionParameters = Stub(CrossBuildSessionParameters) {
+            getStartParameter() >> startParameter
+        }
 
         when:
         ImmutableTransformWorkspaceServices result = services.createTransformWorkspaceServices(
@@ -99,7 +106,7 @@ class DependencyManagementGradleUserHomeScopeServicesTest extends Specification 
             fileAccessTimeJournal,
             cacheConfigurations,
             cleanupStrategyFactory,
-            startParameter,
+            crossBuildSessionParameters,
             tempProvider
         )
 
