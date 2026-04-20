@@ -19,6 +19,7 @@ package org.gradle.internal.cc.impl
 import com.google.common.annotations.VisibleForTesting
 import org.gradle.api.logging.Logger
 import org.gradle.api.logging.Logging
+import org.gradle.api.internal.StartParameterInternal
 import org.gradle.api.internal.BuildDefinition
 import org.gradle.api.internal.cache.CacheConfigurationsInternal
 import org.gradle.cache.CacheBuilder
@@ -35,7 +36,6 @@ import org.gradle.cache.internal.filelock.DefaultLockOptions
 import org.gradle.cache.internal.streams.DefaultValueStore
 import org.gradle.cache.internal.streams.ValueStore
 import org.gradle.cache.scopes.BuildTreeScopedCacheBuilderFactory
-import org.gradle.internal.buildtree.BuildModelParameters
 import org.gradle.internal.cc.impl.ConfigurationCacheRepository.ReadableConfigurationCacheStateFile
 import org.gradle.internal.cc.impl.ConfigurationCacheStateStore.StateFile
 import org.gradle.internal.concurrent.Stoppable
@@ -67,7 +67,7 @@ class ConfigurationCacheRepository(
     private val fileAccessTimeJournal: FileAccessTimeJournal,
     private val fileSystem: FileSystem,
     private val fileLockManager: FileLockManager,
-    modelParameters: BuildModelParameters
+    startParameter: StartParameterInternal
 ) : Stoppable {
     companion object {
         private const val LOCK_WAIT_LOG_THRESHOLD_MILLIS = 200L
@@ -84,7 +84,7 @@ class ConfigurationCacheRepository(
     }
 
     private
-    val concurrentInvocationModeEnabled = modelParameters.isConcurrentInvocationModeEnabled
+    val concurrentInvocationModeEnabled = startParameter.isConcurrentInvocationModeEnabled
 
     fun forKey(cacheKey: String): ConfigurationCacheStateStore {
         return StoreImpl(dirForEntry(cacheKey))

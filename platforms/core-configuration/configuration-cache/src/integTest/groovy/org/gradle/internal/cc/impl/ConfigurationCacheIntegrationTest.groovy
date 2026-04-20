@@ -62,6 +62,24 @@ class ConfigurationCacheIntegrationTest extends AbstractConfigurationCacheIntegr
         "help"         | ["--rerun"]
     }
 
+    def "configuration cache can be used with concurrent invocation mode enabled"() {
+        given:
+        settingsFile.createFile()
+        def configurationCache = newConfigurationCacheFixture()
+
+        when:
+        configurationCacheRun "help", "-Dorg.gradle.concurrent.invocations=true"
+
+        then:
+        configurationCache.assertStateStored()
+
+        when:
+        configurationCacheRun "help", "-Dorg.gradle.concurrent.invocations=true"
+
+        then:
+        configurationCache.assertStateLoaded()
+    }
+
     def "can store task selection success/failure for :help --task"() {
         def configurationCache = newConfigurationCacheFixture()
         buildFile.text = """
